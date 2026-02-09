@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Local dev helper: starts one OpenClaw instance behind local Traefik+forward-auth (HTTP only).
+# Local dev helper: starts one OpenClaw instance behind local Traefik+forward-auth (HTTPS, self-signed cert).
 #
 # Usage:
 #   ./scripts/local-up.sh
 #   ./scripts/local-create-instance.sh <instanceId>
 #
 # Then open:
-#   http://openclaw-<instanceId>.localtest.me:<PORT>/
-#   http://openclaw-<instanceId>.localtest.me:<PORT>/terminal?token=...
+#   https://openclaw-<instanceId>.localtest.me:<PORT>/
+#   https://openclaw-<instanceId>.localtest.me:<PORT>/terminal?token=...
 
 cd "$(dirname "$0")/.."
 
@@ -50,11 +50,11 @@ docker run -d \
   --label 'traefik.enable=true' \
   --label "traefik.http.routers.${CONTAINER}.rule=Host(\`${HOSTNAME}\`)" \
   --label "traefik.http.routers.${CONTAINER}.service=${CONTAINER}" \
-  --label "traefik.http.routers.${CONTAINER}.entrypoints=web" \
+  --label "traefik.http.routers.${CONTAINER}.entrypoints=websecure" \
   --label "traefik.http.services.${CONTAINER}.loadbalancer.server.port=18789" \
   --label "traefik.http.routers.${CONTAINER}-terminal.rule=Host(\`${HOSTNAME}\`) && PathPrefix(\`/terminal\`)" \
   --label "traefik.http.routers.${CONTAINER}-terminal.service=${CONTAINER}-terminal" \
-  --label "traefik.http.routers.${CONTAINER}-terminal.entrypoints=web" \
+  --label "traefik.http.routers.${CONTAINER}-terminal.entrypoints=websecure" \
   --label "traefik.http.routers.${CONTAINER}-terminal.priority=100" \
   --label "traefik.http.middlewares.${CONTAINER}-terminal-strip.stripprefix.prefixes=/terminal" \
   --label "traefik.http.middlewares.${CONTAINER}-terminal-strip.stripprefix.forceSlash=true" \
@@ -67,10 +67,9 @@ docker run -d \
 
 TOKEN="$(OPENCLAW_TTYD_SECRET="${OPENCLAW_TTYD_SECRET}" ./scripts/terminal-token.sh "${INSTANCE_ID}")"
 
-echo "Waiting for Traefik to pick up routes..."
 ready=0
 for _ in $(seq 1 120); do
-  code="$(curl -s -o /dev/null -w "%{http_code}" -H "Host: ${HOSTNAME}" "http://localhost:${PORT}/" || true)"
+  code="$(curl -sk -o /dev/null -w "%{http_code}" -H "Host: ${HOSTNAME}" "https://localhost:${PORT}/" || true)"
   case "${code}" in
     200)
       ready=1
@@ -80,7 +79,6 @@ for _ in $(seq 1 120); do
       sleep 0.5
       ;;
     *)
-      # Any other status means Traefik can reach the container and we're no longer in "no backends yet" territory.
       ready=1
       break
       ;;
@@ -88,15 +86,5 @@ for _ in $(seq 1 120); do
 done
 
 if [ "${ready}" != "1" ]; then
-  echo "Warning: instance did not become ready in time (last status=${code}). It may still come up shortly." >&2
+  echo "Warning: ${INSTANCE_ID} did not become ready in time (last status=${code})." >&2
 fi
-
-echo "Instance is up:"
-echo "- Dashboard: http://${HOSTNAME}:${PORT}/"
-echo "- Terminal:  http://${HOSTNAME}:${PORT}/terminal?token=${TOKEN}"
-
-echo
-echo "Curl smoke tests (using Host header for reliability):"
-curl -s -o /dev/null -w "dashboard=%{http_code}\n" -H "Host: ${HOSTNAME}" "http://localhost:${PORT}/"
-curl -s -o /dev/null -w "terminal(token)=%{http_code}\n" -H "Host: ${HOSTNAME}" "http://localhost:${PORT}/terminal?token=${TOKEN}"
-curl -s -o /dev/null -w "terminal(no-token)=%{http_code}\n" -H "Host: ${HOSTNAME}" "http://localhost:${PORT}/terminal"

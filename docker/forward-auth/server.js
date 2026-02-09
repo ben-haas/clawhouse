@@ -28,7 +28,8 @@ function validateTerminalToken(instanceId, token, options) {
   if (!Number.isFinite(issuedAt)) return false;
   if (nowSeconds - issuedAt > ttlSeconds) return false;
 
-  const expected = crypto.createHmac('sha256', secret).update(`${instanceId}:${timestamp}`).digest('hex');
+  const full = crypto.createHmac('sha256', secret).update(`${instanceId}:${timestamp}`).digest('hex');
+  const expected = full.substring(0, signature.length);
   if (expected.length !== signature.length) return false;
 
   try {

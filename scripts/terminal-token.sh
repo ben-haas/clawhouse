@@ -27,4 +27,7 @@ else
   SIG="$(node -e "const crypto=require('node:crypto'); const secret=process.env.OPENCLAW_TTYD_SECRET; const msg=process.argv[1]; process.stdout.write(crypto.createHmac('sha256', secret).update(msg).digest('hex'))" "${INSTANCE_ID}:${TS_HEX}")"
 fi
 
+TOKEN_CHARS="${OPENCLAW_TTYD_TOKEN_CHARS:-16}"
+SIG="${SIG:0:${TOKEN_CHARS}}"
+
 printf '%s.%s\n' "${TS_HEX}" "${SIG}"

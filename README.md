@@ -17,7 +17,7 @@ Each person gets:
 
 No server needed. Just [Docker](https://docs.docker.com/get-docker/) running on your machine.
 
-This runs on your laptop over HTTP using [localtest.me](http://readme.localtest.me/) (a wildcard domain that points to `127.0.0.1`).
+This runs on your laptop using [localtest.me](http://readme.localtest.me/) (a wildcard domain that points to `127.0.0.1`) with a self-signed HTTPS certificate.
 
 ```bash
 git clone https://github.com/Agent-3-7/openclaw-host-kit
@@ -28,16 +28,18 @@ cd openclaw-host-kit
 That's it. You'll get 2 instances with URLs like:
 
 ```
-http://openclaw-demo1.localtest.me:18090/          # dashboard
-http://openclaw-demo1.localtest.me:18090/terminal?token=abc...   # web terminal
+https://openclaw-demo1.localtest.me:18090/          # dashboard
+https://openclaw-demo1.localtest.me:18090/terminal?token=abc...   # web terminal
 
-http://openclaw-demo2.localtest.me:18090/
-http://openclaw-demo2.localtest.me:18090/terminal?token=def...
+https://openclaw-demo2.localtest.me:18090/
+https://openclaw-demo2.localtest.me:18090/terminal?token=def...
 ```
+
+> **First visit:** Your browser will show a "Your connection is not private" warning because the certificate is self-signed. Click **Advanced > Proceed** (Chrome) or **Accept the Risk** (Firefox). This is expected for local development — the real server deploy uses proper SSL.
 
 > **Tip:** If your browser doesn't resolve `localtest.me`, use curl with an explicit Host header:
 > ```bash
-> curl -H "Host: openclaw-demo1.localtest.me" "http://localhost:18090/"
+> curl -k -H "Host: openclaw-demo1.localtest.me" "https://localhost:18090/"
 > ```
 
 To stop everything:
@@ -159,7 +161,3 @@ src/                      # TypeScript library (used by the managed hosting plat
 - **Updating an instance:** Remove it and re-create it. Data is preserved on disk.
 - **Local dev secrets:** If you don't set `OPENCLAW_TTYD_SECRET`, `local-up.sh` generates one and stores it at `.data/ttyd-secret` so terminal URLs keep working across restarts.
 - **Resource defaults:** 2 CPUs, 4 GB reserved / 6 GB cap memory, 512 PIDs per instance. Override via env vars (`OPENCLAW_CPU_LIMIT`, `OPENCLAW_MEMORY_LIMIT`, etc.).
-
-## License
-
-MIT

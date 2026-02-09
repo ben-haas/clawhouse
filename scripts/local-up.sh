@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # One-command local demo:
-# - Starts a local Traefik HTTP entrypoint + forward-auth (token checks for /terminal)
+# - Starts a local Traefik HTTPS entrypoint (self-signed cert) + forward-auth (token checks for /terminal)
 # - Creates N OpenClaw instances behind Traefik (each on its own localtest.me subdomain)
 #
 # Usage:
@@ -86,27 +86,26 @@ fi
 PORT="${OPENCLAW_LOCAL_HTTP_PORT}"
 DOMAIN="${OPENCLAW_LOCAL_DOMAIN}"
 
-echo
-echo "Creating ${COUNT} instance(s)..."
 IDS=()
 for i in $(seq 1 "${COUNT}"); do
   id="${PREFIX}${i}"
   IDS+=("${id}")
   ./scripts/local-create-instance.sh "${id}"
-  echo
-done
-
-echo "Summary"
-for id in "${IDS[@]}"; do
-  host="openclaw-${id}.${DOMAIN}"
-  token="$(OPENCLAW_TTYD_SECRET="${OPENCLAW_TTYD_SECRET}" ./scripts/terminal-token.sh "${id}")"
-  echo "- ${id}"
-  echo "  dashboard: http://${host}:${PORT}/"
-  echo "  terminal:  http://${host}:${PORT}/terminal?token=${token}"
-  echo "  curl:      curl -H \"Host: ${host}\" \"http://localhost:${PORT}/\""
 done
 
 echo
-echo "Stop the local front-door stack:"
-echo "  ./scripts/local-down.sh"
+for id in "${IDS[@]}"; do
+  host="openclaw-${id}.${DOMAIN}"
+  token="$(OPENCLAW_TTYD_SECRET="${OPENCLAW_TTYD_SECRET}" ./scripts/terminal-token.sh "${id}")"
+  echo "${id}"
+  echo "  dashboard: https://${host}:${PORT}/overview"
+  echo "  terminal:  https://${host}:${PORT}/terminal?token=${token}"
+done
+echo
+echo "To connect the Dashboard UI:"
+echo "  1. Open a terminal URL above"
+echo "  2. Run: openclaw onboard"
+echo "  3. Grab your dashboard token:"
+echo "     sed -n 's/.*\"token\"[^\"]*\"\\([^\"]*\\)\".*/\\1/p' ~/.openclaw/openclaw.json"
+echo "  4. Open the dashboard URL, paste the token into Gateway Token, and click Connect"
 

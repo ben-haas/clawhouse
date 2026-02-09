@@ -30,7 +30,8 @@ export function validateTerminalToken(instanceId: string, token: string, options
   if (!Number.isFinite(issuedAt)) return false;
   if (nowSeconds - issuedAt > ttlSeconds) return false;
 
-  const expected = createHmac('sha256', secret).update(`${instanceId}:${timestamp}`).digest('hex');
+  const full = createHmac('sha256', secret).update(`${instanceId}:${timestamp}`).digest('hex');
+  const expected = full.substring(0, signature.length);
   if (expected.length !== signature.length) return false;
   return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 }

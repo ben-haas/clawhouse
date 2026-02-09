@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Local dev helper: run Traefik (HTTP) + openclaw-forward-auth on a shared Docker network.
-# This is meant for quick smoke tests on your laptop (no DNS, no HTTPS).
+# Local dev helper: run Traefik (HTTPS, self-signed cert) + openclaw-forward-auth on a shared Docker network.
+# This is meant for quick smoke tests on your laptop (no DNS setup needed).
 #
 # Most people should run:
 #   ./scripts/local-up.sh 2
@@ -26,7 +26,8 @@ docker run -d \
   traefik:v3.1 \
   --providers.docker=true \
   --providers.docker.exposedbydefault=false \
-  --entrypoints.web.address=:8080 \
+  --entrypoints.websecure.address=:8080 \
+  --entrypoints.websecure.http.tls=true \
   --log.level=INFO >/dev/null
 
 docker rm -f "${FORWARD_AUTH_CONTAINER}" >/dev/null 2>&1 || true
@@ -37,6 +38,3 @@ docker run -d \
   -e OPENCLAW_TTYD_TTL_SECONDS="${OPENCLAW_TTYD_TTL_SECONDS:-86400}" \
   "${FORWARD_AUTH_IMAGE}" >/dev/null
 
-echo "Local front-door stack is up:"
-echo "- HTTP entrypoint: http://localhost:${PORT}/"
-echo "- Forward auth:    (internal) http://${FORWARD_AUTH_CONTAINER}:8080/"
