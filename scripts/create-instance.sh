@@ -167,5 +167,9 @@ fi
 
 echo
 echo "Instance created: ${INSTANCE_ID}"
+echo
+echo "Dashboard URL:"
+./scripts/dashboard-url.sh "${INSTANCE_ID}" || true
+echo
 echo "Terminal URL:"
-OPENCLAW_BASE_DOMAIN="${OPENCLAW_BASE_DOMAIN}" OPENCLAW_HOST_SHARD="${OPENCLAW_HOST_SHARD:-}" OPENCLAW_SUBDOMAIN="${OPENCLAW_SUBDOMAIN:-}" OPENCLAW_DEPLOY_MODE="${OPENCLAW_DEPLOY_MODE}" OPENCLAW_TTYD_SECRET="${OPENCLAW_TTYD_SECRET:-}" ./scripts/terminal-url.sh "${INSTANCE_ID}" || true
+./scripts/terminal-url.sh "${INSTANCE_ID}" || true
