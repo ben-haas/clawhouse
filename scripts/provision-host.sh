@@ -30,6 +30,9 @@ fi
 # --- Mode-specific validation ---
 if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
   : "${OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN:?Missing OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN}"
+  : "${OPENCLAW_CLOUDFLARE_API_TOKEN:?Missing OPENCLAW_CLOUDFLARE_API_TOKEN}"
+  : "${OPENCLAW_CLOUDFLARE_ZONE_ID:?Missing OPENCLAW_CLOUDFLARE_ZONE_ID}"
+  : "${OPENCLAW_CLOUDFLARE_TUNNEL_ID:?Missing OPENCLAW_CLOUDFLARE_TUNNEL_ID}"
 else
   : "${OPENCLAW_ACME_EMAIL:?Missing OPENCLAW_ACME_EMAIL}"
   : "${OPENCLAW_VERCEL_API_TOKEN:?Missing OPENCLAW_VERCEL_API_TOKEN}"
@@ -66,10 +69,27 @@ if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
   # Ensure the network is always named `traefik_default` (matches instance labels).
   docker compose -p traefik --env-file .env -f deploy/cloudflare-tunnel/docker-compose.yml up -d --build
 
+  # --- Create wildcard DNS record pointing to the tunnel ---
+  WILDCARD_NAME="*.${OPENCLAW_BASE_DOMAIN}"
+  TUNNEL_TARGET="${OPENCLAW_CLOUDFLARE_TUNNEL_ID}.cfargotunnel.com"
+
   echo
   echo "Traefik + cloudflared are up."
-  echo "Expected wildcard DNS (CNAME): *.${OPENCLAW_WILDCARD_DOMAIN} -> <tunnel-id>.cfargotunnel.com"
-  echo "Run scripts/cf-dns-create-wildcard.sh to create the DNS record via Cloudflare API."
+  echo "Creating wildcard DNS CNAME: ${WILDCARD_NAME} -> ${TUNNEL_TARGET}"
+
+  RESPONSE=$(curl -sS -X POST \
+    "https://api.cloudflare.com/client/v4/zones/${OPENCLAW_CLOUDFLARE_ZONE_ID}/dns_records" \
+    -H "Authorization: Bearer ${OPENCLAW_CLOUDFLARE_API_TOKEN}" \
+    -H "Content-Type: application/json" \
+    --data "{
+      \"type\": \"CNAME\",
+      \"name\": \"${WILDCARD_NAME}\",
+      \"content\": \"${TUNNEL_TARGET}\",
+      \"proxied\": true,
+      \"ttl\": 1
+    }")
+
+  echo "${RESPONSE}"
 else
   mkdir -p /opt/traefik
   touch /opt/traefik/acme.json

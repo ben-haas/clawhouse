@@ -12,6 +12,12 @@ export type ProvisionScriptInput =
   | {
       deployMode: 'cloudflare-tunnel';
       cloudflareTunnelCompose: CloudflareTunnelComposeInput;
+      cloudflareDns: {
+        apiToken: string;
+        zoneId: string;
+        tunnelId: string;
+        baseDomain: string;
+      };
       openclawRuntimeImage?: string;
       composePath?: string;
     };
@@ -60,5 +66,21 @@ export function buildProvisionScript(input: ProvisionScriptInput): string {
     dockerPull,
   ];
 
-  return [...commonSteps, ...acmeSteps, ...composeSteps].filter(Boolean).join('\n');
+  const dnsSteps = deployMode === 'cloudflare-tunnel'
+    ? (() => {
+        const { apiToken, zoneId, tunnelId, baseDomain } =
+          (input as { cloudflareDns: { apiToken: string; zoneId: string; tunnelId: string; baseDomain: string } }).cloudflareDns;
+        const wildcardName = `*.${baseDomain}`;
+        const tunnelTarget = `${tunnelId}.cfargotunnel.com`;
+        return [
+          `echo "Creating wildcard DNS CNAME: ${wildcardName} -> ${tunnelTarget}"`,
+          `curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records" \\`,
+          `  -H "Authorization: Bearer ${apiToken}" \\`,
+          `  -H "Content-Type: application/json" \\`,
+          `  --data '{"type":"CNAME","name":"${wildcardName}","content":"${tunnelTarget}","proxied":true,"ttl":1}'`,
+        ];
+      })()
+    : [];
+
+  return [...commonSteps, ...acmeSteps, ...composeSteps, ...dnsSteps].filter(Boolean).join('\n');
 }
