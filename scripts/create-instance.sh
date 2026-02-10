@@ -109,13 +109,12 @@ docker run -d \
 if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
   : "${OPENCLAW_CLOUDFLARE_API_TOKEN:?Missing OPENCLAW_CLOUDFLARE_API_TOKEN}"
   : "${OPENCLAW_CLOUDFLARE_ZONE_ID:?Missing OPENCLAW_CLOUDFLARE_ZONE_ID}"
-  : "${OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN:?Missing OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN}"
 
   INGRESS_FILE="/var/lib/openclaw/cloudflared/ingress.json"
   CONFIG_FILE="/var/lib/openclaw/cloudflared/config.yml"
 
-  # Extract tunnel ID from token
-  CF_TUNNEL_ID=$(echo "${OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN}" | base64 -d | jq -r '.t')
+  # Read tunnel ID from credentials written during provisioning
+  CF_TUNNEL_ID=$(jq -r '.TunnelID' /var/lib/openclaw/cloudflared/credentials.json)
 
   # Upsert ingress rule (idempotent — removes existing rule for same hostname first)
   echo "Adding tunnel ingress rule for ${HOSTNAME}…"

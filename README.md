@@ -121,15 +121,21 @@ No public IP or open ports needed. Cloudflare handles TLS and routes traffic thr
 
 1. A Linux machine (Ubuntu/Debian) — Docker is installed automatically
 2. A domain with **DNS on [Cloudflare](https://dash.cloudflare.com/)** (free plan works)
-3. A Cloudflare account with access to [Zero Trust](https://one.dash.cloudflare.com/)
+3. [`cloudflared` CLI](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) installed on your local machine
 
 #### 1. Create a Cloudflare Tunnel
 
-1. Go to [Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Connectors**
-2. Click **Create a connector** → choose **Cloudflared**
-3. Give it a name (e.g. `openclaw-h1`)
-4. On the Install Connector page, copy the install command shown. Extract the **tunnel token** — the long `eyJ...` string after `--token`. You don't need to install the connector on your machine — the Docker setup handles that.
-5. You can now navigate away from this page — no public hostname route is required yet (we'll add one after provisioning). Go back to **Networks** → **Connectors** and note the **Tunnel ID** (a UUID like `abcd1234-...`) listed next to your connector.
+```bash
+cloudflared tunnel login
+cloudflared tunnel create openclaw-h1
+```
+
+Then grab the tunnel token:
+```bash
+cloudflared tunnel token openclaw-h1
+```
+
+Copy the `eyJ...` string — you'll paste it into `.env` below.
 
 #### 2. Get your Zone ID and API token
 
@@ -160,7 +166,6 @@ OPENCLAW_DEPLOY_MODE=cloudflare-tunnel
 OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoiYWJj...   # from step 1
 OPENCLAW_CLOUDFLARE_API_TOKEN=your_api_token        # from step 2
 OPENCLAW_CLOUDFLARE_ZONE_ID=your_zone_id            # from step 2
-OPENCLAW_CLOUDFLARE_TUNNEL_ID=abcd1234-...          # from step 1
 ```
 
 Provision the server (installs Docker, starts Traefik + cloudflared):
@@ -168,24 +173,7 @@ Provision the server (installs Docker, starts Traefik + cloudflared):
 sudo ./scripts/provision-host.sh
 ```
 
-#### 4. Set up DNS and tunnel routing
-
-Create the wildcard DNS record (CNAME pointing to your tunnel):
-```bash
-./scripts/cf-dns-create-wildcard.sh
-```
-
-Then add the public hostname in Cloudflare:
-1. Go to [Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Connectors** → click your connector → **Edit**
-2. Go to the **Public Application Routes** tab → **Add a public hostname**
-3. Fill in:
-   - **Subdomain:** `*`
-   - **Domain:** `example.com` (your base domain)
-   - **Type:** HTTP
-   - **URL:** `traefik:80`
-4. Save
-
-#### 5. Create instances
+#### 4. Create instances
 
 From here it's the same as Option A — [jump to creating instances](#create-instances-for-your-friends).
 
@@ -258,7 +246,6 @@ scripts/
   terminal-url.sh            # print terminal URL for an instance
   dashboard-url.sh           # print dashboard URL for an instance
   terminal-token.sh          # generate a terminal auth token
-  cf-dns-create-wildcard.sh  # create wildcard CNAME via Cloudflare API
 docker/
   openclaw-ttyd/             # runtime image (OpenClaw + web terminal)
   forward-auth/              # tiny token-validation service (~90 lines of JS)
