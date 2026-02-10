@@ -1,6 +1,5 @@
 export interface CloudflareTunnelComposeInput {
   tunnelToken: string;
-  wildcardDomain: string;
   ttydSecret: string;
   ttydTtlSeconds?: number;
   traefikImage?: string;
