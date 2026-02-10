@@ -51,8 +51,8 @@ if (!cfScript.includes('docker compose')) {
 if (!cfScript.includes('cloudflared')) {
   throw new Error('[cloudflare-tunnel] Expected cloudflared in CF tunnel mode');
 }
-if (!cfScript.includes('TUNNEL_TOKEN')) {
-  throw new Error('[cloudflare-tunnel] Expected TUNNEL_TOKEN in CF tunnel mode');
+if (!cfScript.includes('--token test-tunnel-token')) {
+  throw new Error('[cloudflare-tunnel] Expected --token flag in CF tunnel mode');
 }
 if (cfScript.includes('acme')) {
   throw new Error('[cloudflare-tunnel] Should NOT contain acme in CF tunnel mode');

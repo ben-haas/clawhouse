@@ -43,6 +43,10 @@ mkdir -p "${DATA_DIR}"
 chown 1000:1000 "${DATA_DIR}"
 
 docker pull "${OPENCLAW_RUNTIME_IMAGE}" >/dev/null 2>&1 || true
+if ! docker image inspect "${OPENCLAW_RUNTIME_IMAGE}" >/dev/null 2>&1; then
+  echo "Image ${OPENCLAW_RUNTIME_IMAGE} not found; building from docker/openclaw-ttyd …"
+  docker build -t "${OPENCLAW_RUNTIME_IMAGE}" docker/openclaw-ttyd
+fi
 
 # --- Select entrypoint and TLS labels based on deploy mode ---
 if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then

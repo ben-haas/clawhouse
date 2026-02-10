@@ -125,13 +125,11 @@ No public IP or open ports needed. Cloudflare handles TLS and routes traffic thr
 
 #### 1. Create a Cloudflare Tunnel
 
-1. Go to [Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Tunnels**
-2. Click **Create a tunnel** → choose **Cloudflared** as the connector
+1. Go to [Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Connectors**
+2. Click **Create a connector** → choose **Cloudflared**
 3. Give it a name (e.g. `openclaw-h1`)
-4. On the Install Connector page, copy the **tunnel token** (the long string after `--token`). You don't need to install the connector on your machine — the Docker setup handles that.
-5. Click **Next** to skip to the Public Hostname tab, but don't add a hostname yet — we'll do that after provisioning
-
-Note the **Tunnel ID** shown on the tunnel overview page (a UUID like `abcd1234-...`).
+4. On the Install Connector page, copy the install command shown. Extract the **tunnel token** — the long `eyJ...` string after `--token`. You don't need to install the connector on your machine — the Docker setup handles that.
+5. You can now navigate away from this page — no public hostname route is required yet (we'll add one after provisioning). Go back to **Networks** → **Connectors** and note the **Tunnel ID** (a UUID like `abcd1234-...`) listed next to your connector.
 
 #### 2. Get your Zone ID and API token
 
@@ -140,7 +138,7 @@ Note the **Tunnel ID** shown on the tunnel overview page (a UUID like `abcd1234-
 - The **Zone ID** is on the right sidebar of the Overview page
 
 **API Token:**
-- Go to **My Profile** → [**API Tokens**](https://dash.cloudflare.com/profile/api-tokens) → **Create Token**
+- Go to **Account Home** → **Manage account** → **Account API Tokens** → **Create Token**
 - Use the **Edit zone DNS** template
 - Scope it to your specific domain under **Zone Resources**
 - Create the token and copy it
@@ -179,8 +177,8 @@ Create the wildcard DNS record (CNAME pointing to your tunnel):
 ```
 
 Then add the public hostname in Cloudflare:
-1. Go to [Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Tunnels** → click your tunnel → **Edit**
-2. Go to the **Public Hostname** tab → **Add a public hostname**
+1. Go to [Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Connectors** → click your connector → **Edit**
+2. Go to the **Public Application Routes** tab → **Add a public hostname**
 3. Fill in:
    - **Subdomain:** `*.h1.openclaw` (adjust to match your shard and subdomain)
    - **Domain:** `example.com` (your base domain)

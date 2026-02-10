@@ -18,7 +18,6 @@ export function buildCloudflareTunnelComposeYaml(input: CloudflareTunnelComposeI
   const dashboardPort = enableDashboard ? '      - "8080:8080"' : '';
 
   return [
-    'version: "3.9"',
     'services:',
     '  traefik:',
     `    image: ${traefikImage}`,
@@ -50,9 +49,7 @@ export function buildCloudflareTunnelComposeYaml(input: CloudflareTunnelComposeI
     `    image: ${cloudflaredImage}`,
     '    container_name: cloudflared',
     '    restart: unless-stopped',
-    '    command: tunnel run',
-    '    environment:',
-    `      - TUNNEL_TOKEN=${input.tunnelToken}`,
+    `    command: tunnel --no-autoupdate run --token ${input.tunnelToken}`,
     '',
     'networks:',
     '  default:',

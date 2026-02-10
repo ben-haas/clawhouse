@@ -21,7 +21,6 @@ export function buildTraefikComposeYaml(input: TraefikComposeInput): string {
   const dashboardPort = enableDashboard ? '      - "8080:8080"' : '';
 
   return [
-    'version: "3.9"',
     'services:',
     '  traefik:',
     `    image: ${traefikImage}`,
@@ -70,7 +69,6 @@ export function buildTraefikHttpComposeYaml(input: TraefikHttpComposeInput): str
   const dashboardPort = enableDashboard ? '      - "8080:8080"' : '';
 
   return [
-    'version: "3.9"',
     'services:',
     '  traefik:',
     `    image: ${traefikImage}`,

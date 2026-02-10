@@ -49,7 +49,7 @@ fi
 # --- Mode-specific setup ---
 if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
   # Ensure the network is always named `traefik_default` (matches instance labels).
-  docker compose -p traefik -f deploy/cloudflare-tunnel/docker-compose.yml up -d --build
+  docker compose -p traefik --env-file .env -f deploy/cloudflare-tunnel/docker-compose.yml up -d --build
 
   echo
   echo "Traefik + cloudflared are up."
@@ -61,7 +61,7 @@ else
   chmod 600 /opt/traefik/acme.json
 
   # Ensure the network is always named `traefik_default` (matches instance labels).
-  docker compose -p traefik -f deploy/traefik/docker-compose.yml up -d --build
+  docker compose -p traefik --env-file .env -f deploy/traefik/docker-compose.yml up -d --build
 
   echo
   echo "Traefik is up."
