@@ -22,7 +22,7 @@ This runs on your laptop using [localtest.me](http://readme.localtest.me/) (a wi
 ```bash
 git clone https://github.com/Agent-3-7/openclaw-host-kit
 cd openclaw-host-kit
-./scripts/local-up.sh 2
+make local-up COUNT=2
 ```
 
 That's it. You'll get 2 instances with URLs like:
@@ -44,8 +44,27 @@ https://openclaw-demo2.localtest.me:18090/terminal?token=def...
 
 To stop everything:
 ```bash
-./scripts/local-down.sh
+make local-down
 ```
+
+---
+
+## Makefile
+
+All common operations are available as `make` targets. Run `make help` to see them:
+
+| Target | Usage | Description |
+|--------|-------|-------------|
+| `help` | `make help` | Show available targets |
+| `typecheck` | `make typecheck` | Run TypeScript type-checking |
+| `smoke` | `make smoke` | Run provision script smoke test |
+| `check` | `make check` | Run all checks (typecheck + smoke) |
+| `local-up` | `make local-up COUNT=3` | Start local demo (default COUNT=2) |
+| `local-down` | `make local-down` | Tear down local demo |
+| `provision` | `make provision` | Provision server (runs with sudo) |
+| `create-instance` | `make create-instance ID=alice` | Create an instance |
+| `terminal-url` | `make terminal-url ID=alice` | Print terminal URL |
+| `dashboard-url` | `make dashboard-url ID=alice` | Print dashboard URL |
 
 ---
 
@@ -108,7 +127,7 @@ OPENCLAW_TTYD_SECRET=some_long_random_string
 
 Provision the server (installs Docker, starts Traefik reverse proxy):
 ```bash
-sudo ./scripts/provision-host.sh
+make provision
 ```
 
 ---
@@ -121,7 +140,7 @@ No public IP or open ports needed. Cloudflare handles TLS and routes traffic thr
 
 1. A Linux machine (Ubuntu/Debian) — Docker is installed automatically
 2. A domain with **DNS on [Cloudflare](https://dash.cloudflare.com/)** (free plan works)
-3. [`cloudflared` CLI](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) installed on your local machine
+3. [`cloudflared` CLI](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) installed on the **host machine**
 
 #### 1. Create a Cloudflare Tunnel
 
@@ -130,12 +149,12 @@ cloudflared tunnel login
 cloudflared tunnel create openclaw-h1
 ```
 
-Then grab the tunnel token:
-```bash
-cloudflared tunnel token openclaw-h1
-```
+This prints the tunnel ID and creates a credentials file at `~/.cloudflared/<TUNNEL_ID>.json`. Copy it to the openclaw config directory:
 
-Copy the `eyJ...` string — you'll paste it into `.env` below.
+```bash
+sudo mkdir -p /var/lib/openclaw/cloudflared
+sudo cp ~/.cloudflared/<TUNNEL_ID>.json /var/lib/openclaw/cloudflared/credentials.json
+```
 
 #### 2. Get your Zone ID and API token
 
@@ -163,14 +182,13 @@ OPENCLAW_BASE_DOMAIN=example.com
 OPENCLAW_TTYD_SECRET=some_long_random_string
 
 OPENCLAW_DEPLOY_MODE=cloudflare-tunnel
-OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoiYWJj...   # from step 1
 OPENCLAW_CLOUDFLARE_API_TOKEN=your_api_token        # from step 2
 OPENCLAW_CLOUDFLARE_ZONE_ID=your_zone_id            # from step 2
 ```
 
 Provision the server (installs Docker, starts Traefik + cloudflared):
 ```bash
-sudo ./scripts/provision-host.sh
+make provision
 ```
 
 #### 4. Create instances
@@ -183,15 +201,15 @@ From here it's the same as Option A — [jump to creating instances](#create-ins
 
 Pick any ID you like — a name, a random string, whatever:
 ```bash
-sudo ./scripts/create-instance.sh alice
-sudo ./scripts/create-instance.sh bob
-sudo ./scripts/create-instance.sh charlie
+make create-instance ID=alice
+make create-instance ID=bob
+make create-instance ID=charlie
 ```
 
 Get the URLs to send them:
 ```bash
-./scripts/terminal-url.sh alice
-sudo ./scripts/dashboard-url.sh alice
+make terminal-url ID=alice
+make dashboard-url ID=alice
 ```
 
 The URLs depend on your deploy mode:

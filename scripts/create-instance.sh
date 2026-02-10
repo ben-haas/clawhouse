@@ -126,7 +126,7 @@ if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
         . + [{"hostname": $hostname, "service": $service}, {"service": "http_status:404"}]
       end
   ' "$INGRESS_FILE")
-  echo "$UPDATED_INGRESS" > "$INGRESS_FILE"
+  echo "$UPDATED_INGRESS" >"$INGRESS_FILE"
 
   # Regenerate config.yml from ingress.json
   generate_cloudflared_config() {
@@ -136,7 +136,7 @@ if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
       echo "credentials-file: /etc/cloudflared/credentials.json"
       echo "ingress:"
       jq -r '.[] | if .hostname then "  - hostname: \(.hostname)\n    service: \(.service)" else "  - service: \(.service)" end' "$INGRESS_FILE"
-    } > "$CONFIG_FILE"
+    } >"$CONFIG_FILE"
   }
   generate_cloudflared_config "$CF_TUNNEL_ID"
 
@@ -168,8 +168,3 @@ fi
 echo
 echo "Instance created: ${INSTANCE_ID}"
 echo
-echo "Dashboard URL:"
-./scripts/dashboard-url.sh "${INSTANCE_ID}" || true
-echo
-echo "Terminal URL:"
-./scripts/terminal-url.sh "${INSTANCE_ID}" || true
