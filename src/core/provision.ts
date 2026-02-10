@@ -1,5 +1,5 @@
 import { buildTraefikComposeYaml, TraefikComposeInput } from './traefik';
-import { buildCloudflareTunnelComposeYaml, CloudflareTunnelComposeInput } from './cloudflared';
+import { buildCloudflareTunnelComposeYaml, CloudflareTunnelComposeInput, decodeTunnelToken, buildCredentialsJson, buildCloudflaredConfigYaml } from './cloudflared';
 import { DeployMode } from './deployMode';
 
 export type ProvisionScriptInput =
@@ -12,6 +12,7 @@ export type ProvisionScriptInput =
   | {
       deployMode: 'cloudflare-tunnel';
       cloudflareTunnelCompose: CloudflareTunnelComposeInput;
+      tunnelToken: string;
       cloudflareDns?: {
         apiToken: string;
         zoneId: string;
@@ -58,6 +59,30 @@ export function buildProvisionScript(input: ProvisionScriptInput): string {
     '${SUDO} chmod 600 /opt/traefik/acme.json',
   ] : [];
 
+  const cloudflaredSteps: string[] = [];
+  if (deployMode === 'cloudflare-tunnel') {
+    const cfInput = input as { tunnelToken: string; cloudflareTunnelCompose: CloudflareTunnelComposeInput };
+    const creds = decodeTunnelToken(cfInput.tunnelToken);
+    const credentialsJson = buildCredentialsJson(creds);
+    const initialIngress = [{ service: 'http_status:404' }];
+    const configYaml = buildCloudflaredConfigYaml({ tunnelId: creds.tunnelId, ingress: initialIngress });
+
+    cloudflaredSteps.push(
+      `${sudoLiteral} mkdir -p /var/lib/openclaw/cloudflared`,
+      `${sudoLiteral} tee /var/lib/openclaw/cloudflared/credentials.json >/dev/null <<'CREDS'`,
+      credentialsJson,
+      'CREDS',
+      `if [ ! -f /var/lib/openclaw/cloudflared/ingress.json ]; then`,
+      `  ${sudoLiteral} tee /var/lib/openclaw/cloudflared/ingress.json >/dev/null <<'INGRESS'`,
+      JSON.stringify(initialIngress, null, 2),
+      'INGRESS',
+      'fi',
+      `${sudoLiteral} tee /var/lib/openclaw/cloudflared/config.yml >/dev/null <<'CFGYML'`,
+      configYaml,
+      'CFGYML',
+    );
+  }
+
   const composeSteps = [
     `${sudoLiteral} tee ${composePath} >/dev/null <<'YAML'`,
     composeYaml,
@@ -68,5 +93,5 @@ export function buildProvisionScript(input: ProvisionScriptInput): string {
 
   const dnsSteps: string[] = [];
 
-  return [...commonSteps, ...acmeSteps, ...composeSteps, ...dnsSteps].filter(Boolean).join('\n');
+  return [...commonSteps, ...acmeSteps, ...cloudflaredSteps, ...composeSteps, ...dnsSteps].filter(Boolean).join('\n');
 }

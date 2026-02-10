@@ -8,8 +8,8 @@ export { buildProvisionScript } from './core/provision';
 export type { ProvisionScriptInput } from './core/provision';
 export { buildTraefikComposeYaml, buildTraefikHttpComposeYaml } from './core/traefik';
 export type { TraefikComposeInput, TraefikHttpComposeInput } from './core/traefik';
-export { buildCloudflareTunnelComposeYaml } from './core/cloudflared';
-export type { CloudflareTunnelComposeInput } from './core/cloudflared';
+export { buildCloudflareTunnelComposeYaml, decodeTunnelToken, buildCredentialsJson, buildCloudflaredConfigYaml } from './core/cloudflared';
+export type { CloudflareTunnelComposeInput, TunnelCredentials, CloudflaredIngressRule } from './core/cloudflared';
 export {
   buildTunnelCname,
   buildCreateDnsRecordRequest,

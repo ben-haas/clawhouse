@@ -62,7 +62,41 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 # --- Mode-specific setup ---
+generate_cloudflared_config() {
+  local tunnel_id="$1"
+  local ingress_file="/var/lib/openclaw/cloudflared/ingress.json"
+  local config_file="/var/lib/openclaw/cloudflared/config.yml"
+
+  {
+    echo "tunnel: ${tunnel_id}"
+    echo "credentials-file: /etc/cloudflared/credentials.json"
+    echo "ingress:"
+    jq -r '.[] | if .hostname then "  - hostname: \(.hostname)\n    service: \(.service)" else "  - service: \(.service)" end' "$ingress_file"
+  } > "$config_file"
+}
+
 if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
+  # Decode tunnel token and set up local cloudflared config
+  TUNNEL_JSON=$(echo "${OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN}" | base64 -d)
+  CF_ACCOUNT_TAG=$(echo "${TUNNEL_JSON}" | jq -r '.a')
+  CF_TUNNEL_ID=$(echo "${TUNNEL_JSON}" | jq -r '.t')
+  CF_TUNNEL_SECRET=$(echo "${TUNNEL_JSON}" | jq -r '.s')
+
+  mkdir -p /var/lib/openclaw/cloudflared
+
+  jq -n \
+    --arg acct "$CF_ACCOUNT_TAG" \
+    --arg tid "$CF_TUNNEL_ID" \
+    --arg sec "$CF_TUNNEL_SECRET" \
+    '{ AccountTag: $acct, TunnelID: $tid, TunnelSecret: $sec }' \
+    > /var/lib/openclaw/cloudflared/credentials.json
+
+  if [ ! -f /var/lib/openclaw/cloudflared/ingress.json ]; then
+    echo '[{"service":"http_status:404"}]' > /var/lib/openclaw/cloudflared/ingress.json
+  fi
+
+  generate_cloudflared_config "$CF_TUNNEL_ID"
+
   # Ensure the network is always named `traefik_default` (matches instance labels).
   docker compose -p traefik --env-file .env -f deploy/cloudflare-tunnel/docker-compose.yml up -d --build
 

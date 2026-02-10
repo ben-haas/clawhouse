@@ -107,14 +107,46 @@ docker run -d \
 
 # --- Per-instance tunnel route + DNS (cloudflare-tunnel mode only) ---
 if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
-  : "${OPENCLAW_CLOUDFLARE_ACCOUNT_ID:?Missing OPENCLAW_CLOUDFLARE_ACCOUNT_ID}"
   : "${OPENCLAW_CLOUDFLARE_API_TOKEN:?Missing OPENCLAW_CLOUDFLARE_API_TOKEN}"
   : "${OPENCLAW_CLOUDFLARE_ZONE_ID:?Missing OPENCLAW_CLOUDFLARE_ZONE_ID}"
-  : "${OPENCLAW_CLOUDFLARE_TUNNEL_ID:?Missing OPENCLAW_CLOUDFLARE_TUNNEL_ID}"
+  : "${OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN:?Missing OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN}"
 
+  INGRESS_FILE="/var/lib/openclaw/cloudflared/ingress.json"
+  CONFIG_FILE="/var/lib/openclaw/cloudflared/config.yml"
+
+  # Extract tunnel ID from token
+  CF_TUNNEL_ID=$(echo "${OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN}" | base64 -d | jq -r '.t')
+
+  # Upsert ingress rule (idempotent — removes existing rule for same hostname first)
+  echo "Adding tunnel ingress rule for ${HOSTNAME}…"
+  UPDATED_INGRESS=$(jq --arg hostname "${HOSTNAME}" --arg service "http://traefik:80" '
+    [.[] | select(.hostname != $hostname)]
+    | if (.[-1].hostname // null) == null then
+        .[:-1] + [{"hostname": $hostname, "service": $service}] + .[-1:]
+      else
+        . + [{"hostname": $hostname, "service": $service}, {"service": "http_status:404"}]
+      end
+  ' "$INGRESS_FILE")
+  echo "$UPDATED_INGRESS" > "$INGRESS_FILE"
+
+  # Regenerate config.yml from ingress.json
+  generate_cloudflared_config() {
+    local tunnel_id="$1"
+    {
+      echo "tunnel: ${tunnel_id}"
+      echo "credentials-file: /etc/cloudflared/credentials.json"
+      echo "ingress:"
+      jq -r '.[] | if .hostname then "  - hostname: \(.hostname)\n    service: \(.service)" else "  - service: \(.service)" end' "$INGRESS_FILE"
+    } > "$CONFIG_FILE"
+  }
+  generate_cloudflared_config "$CF_TUNNEL_ID"
+
+  docker restart cloudflared
+
+  # Create per-instance CNAME DNS record
   CF_API="https://api.cloudflare.com/client/v4"
   AUTH_HEADER="Authorization: Bearer ${OPENCLAW_CLOUDFLARE_API_TOKEN}"
-  TUNNEL_CFG_URL="${CF_API}/accounts/${OPENCLAW_CLOUDFLARE_ACCOUNT_ID}/tunnels/${OPENCLAW_CLOUDFLARE_TUNNEL_ID}/configurations"
+  TUNNEL_TARGET="${CF_TUNNEL_ID}.cfargotunnel.com"
 
   cf_check() {
     local response="$1" action="$2"
@@ -126,50 +158,6 @@ if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
     fi
   }
 
-  # 1. GET current tunnel config (404 means no config exists yet)
-  CFG_HTTP_CODE=$(curl -sS -o /tmp/cf_tunnel_cfg.json -w "%{http_code}" -X GET "${TUNNEL_CFG_URL}" \
-    -H "${AUTH_HEADER}")
-
-  if [ "$CFG_HTTP_CODE" = "200" ]; then
-    CURRENT_CONFIG=$(cat /tmp/cf_tunnel_cfg.json)
-    cf_check "$CURRENT_CONFIG" "get tunnel config"
-    # Add ingress rule for this instance before the catch-all
-    UPDATED_INGRESS=$(echo "${CURRENT_CONFIG}" | jq --arg hostname "${HOSTNAME}" --arg service "http://traefik:80" '
-      .result.config.ingress
-      | [.[] | select(.hostname != $hostname)]
-      | if (.[-1].hostname // null) == null then
-          .[:-1] + [{"hostname": $hostname, "service": $service}] + .[-1:]
-        else
-          . + [{"hostname": $hostname, "service": $service}, {"service": "http_status:404"}]
-        end
-    ')
-    UPDATED_CONFIG=$(echo "${CURRENT_CONFIG}" | jq --argjson ingress "${UPDATED_INGRESS}" '
-      .result.config | .ingress = $ingress
-    ')
-  elif [ "$CFG_HTTP_CODE" = "404" ]; then
-    # No config exists yet — create a fresh one
-    UPDATED_CONFIG=$(jq -n --arg hostname "${HOSTNAME}" --arg service "http://traefik:80" '{
-      ingress: [
-        {hostname: $hostname, service: $service},
-        {service: "http_status:404"}
-      ]
-    }')
-  else
-    CURRENT_CONFIG=$(cat /tmp/cf_tunnel_cfg.json)
-    cf_check "$CURRENT_CONFIG" "get tunnel config"
-  fi
-  rm -f /tmp/cf_tunnel_cfg.json
-
-  # 3. PUT updated tunnel config
-  echo "Adding tunnel ingress rule for ${HOSTNAME}…"
-  PUT_RESULT=$(curl -sS -X PUT "${TUNNEL_CFG_URL}" \
-    -H "${AUTH_HEADER}" \
-    -H "Content-Type: application/json" \
-    --data "{\"config\": ${UPDATED_CONFIG}}")
-  cf_check "$PUT_RESULT" "update tunnel config"
-
-  # 4. Create per-instance CNAME DNS record
-  TUNNEL_TARGET="${OPENCLAW_CLOUDFLARE_TUNNEL_ID}.cfargotunnel.com"
   echo "Creating DNS CNAME: ${HOSTNAME} -> ${TUNNEL_TARGET}"
   DNS_RESULT=$(curl -sS -X POST "${CF_API}/zones/${OPENCLAW_CLOUDFLARE_ZONE_ID}/dns_records" \
     -H "${AUTH_HEADER}" \

@@ -30,10 +30,12 @@ if (!traefikScript.includes('certificatesresolvers')) {
 console.log('OK: traefik mode');
 
 // --- Test 2: Cloudflare Tunnel mode ---
+const testTunnelToken = 'eyJhIjoidGVzdC1hY2NvdW50IiwidCI6InRlc3QtdHVubmVsLWlkIiwicyI6InRlc3Qtc2VjcmV0In0=';
 const cfScript = buildProvisionScript({
   deployMode: 'cloudflare-tunnel',
+  tunnelToken: testTunnelToken,
   cloudflareTunnelCompose: {
-    tunnelToken: 'test-tunnel-token',
+    tunnelId: 'test-tunnel-id',
     ttydSecret: 'test-secret',
     ttydTtlSeconds: 86400,
     traefikImage: 'traefik:v3.1',
@@ -50,8 +52,14 @@ if (!cfScript.includes('docker compose')) {
 if (!cfScript.includes('cloudflared')) {
   throw new Error('[cloudflare-tunnel] Expected cloudflared in CF tunnel mode');
 }
-if (!cfScript.includes('--token test-tunnel-token')) {
-  throw new Error('[cloudflare-tunnel] Expected --token flag in CF tunnel mode');
+if (!cfScript.includes('--config /etc/cloudflared/config.yml')) {
+  throw new Error('[cloudflare-tunnel] Expected --config flag in CF tunnel mode');
+}
+if (!cfScript.includes('credentials.json')) {
+  throw new Error('[cloudflare-tunnel] Expected credentials.json setup in CF tunnel mode');
+}
+if (!cfScript.includes('ingress.json')) {
+  throw new Error('[cloudflare-tunnel] Expected ingress.json setup in CF tunnel mode');
 }
 if (cfScript.includes('acme')) {
   throw new Error('[cloudflare-tunnel] Should NOT contain acme in CF tunnel mode');
