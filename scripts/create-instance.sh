@@ -116,9 +116,19 @@ if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
   AUTH_HEADER="Authorization: Bearer ${OPENCLAW_CLOUDFLARE_API_TOKEN}"
   TUNNEL_CFG_URL="${CF_API}/accounts/${OPENCLAW_CLOUDFLARE_ACCOUNT_ID}/tunnels/${OPENCLAW_CLOUDFLARE_TUNNEL_ID}/configurations"
 
+  cf_check() {
+    local response="$1" action="$2"
+    if [ "$(echo "$response" | jq -r '.success')" != "true" ]; then
+      echo "Cloudflare API error (${action}):" >&2
+      echo "$response" | jq -r '.errors[] | "  [\(.code)] \(.message)"' >&2
+      exit 1
+    fi
+  }
+
   # 1. GET current tunnel config
   CURRENT_CONFIG=$(curl -sS -X GET "${TUNNEL_CFG_URL}" \
     -H "${AUTH_HEADER}")
+  cf_check "$CURRENT_CONFIG" "get tunnel config"
 
   # 2. Add ingress rule for this instance before the catch-all
   UPDATED_INGRESS=$(echo "${CURRENT_CONFIG}" | jq --arg hostname "${HOSTNAME}" --arg service "http://traefik:80" '
@@ -137,18 +147,20 @@ if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
 
   # 3. PUT updated tunnel config
   echo "Adding tunnel ingress rule for ${HOSTNAME}…"
-  curl -sS -X PUT "${TUNNEL_CFG_URL}" \
+  PUT_RESULT=$(curl -sS -X PUT "${TUNNEL_CFG_URL}" \
     -H "${AUTH_HEADER}" \
     -H "Content-Type: application/json" \
-    --data "{\"config\": ${UPDATED_CONFIG}}" > /dev/null
+    --data "{\"config\": ${UPDATED_CONFIG}}")
+  cf_check "$PUT_RESULT" "update tunnel config"
 
   # 4. Create per-instance CNAME DNS record
   TUNNEL_TARGET="${OPENCLAW_CLOUDFLARE_TUNNEL_ID}.cfargotunnel.com"
   echo "Creating DNS CNAME: ${HOSTNAME} -> ${TUNNEL_TARGET}"
-  curl -sS -X POST "${CF_API}/zones/${OPENCLAW_CLOUDFLARE_ZONE_ID}/dns_records" \
+  DNS_RESULT=$(curl -sS -X POST "${CF_API}/zones/${OPENCLAW_CLOUDFLARE_ZONE_ID}/dns_records" \
     -H "${AUTH_HEADER}" \
     -H "Content-Type: application/json" \
-    --data "{\"type\":\"CNAME\",\"name\":\"${HOSTNAME}\",\"content\":\"${TUNNEL_TARGET}\",\"proxied\":true,\"ttl\":1}" > /dev/null
+    --data "{\"type\":\"CNAME\",\"name\":\"${HOSTNAME}\",\"content\":\"${TUNNEL_TARGET}\",\"proxied\":true,\"ttl\":1}")
+  cf_check "$DNS_RESULT" "create DNS record"
 fi
 
 echo
