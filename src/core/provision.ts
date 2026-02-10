@@ -12,7 +12,7 @@ export type ProvisionScriptInput =
   | {
       deployMode: 'cloudflare-tunnel';
       cloudflareTunnelCompose: CloudflareTunnelComposeInput;
-      cloudflareDns: {
+      cloudflareDns?: {
         apiToken: string;
         zoneId: string;
         tunnelId: string;
@@ -37,7 +37,7 @@ export function buildProvisionScript(input: ProvisionScriptInput): string {
     'export DEBIAN_FRONTEND=noninteractive',
     'if [ "$(id -u)" -ne 0 ]; then SUDO="sudo -n"; else SUDO=""; fi',
     '${SUDO} apt-get update -y',
-    '${SUDO} apt-get install -y ca-certificates curl gnupg lsb-release',
+    '${SUDO} apt-get install -y ca-certificates curl gnupg jq lsb-release',
     'if ! command -v docker >/dev/null 2>&1; then curl -fsSL https://get.docker.com | ${SUDO} sh; fi',
     '${SUDO} systemctl enable --now docker',
     'if ! docker compose version >/dev/null 2>&1; then ${SUDO} apt-get install -y docker-compose-plugin; fi',
@@ -66,21 +66,7 @@ export function buildProvisionScript(input: ProvisionScriptInput): string {
     dockerPull,
   ];
 
-  const dnsSteps = deployMode === 'cloudflare-tunnel'
-    ? (() => {
-        const { apiToken, zoneId, tunnelId, baseDomain } =
-          (input as { cloudflareDns: { apiToken: string; zoneId: string; tunnelId: string; baseDomain: string } }).cloudflareDns;
-        const wildcardName = `*.${baseDomain}`;
-        const tunnelTarget = `${tunnelId}.cfargotunnel.com`;
-        return [
-          `echo "Creating wildcard DNS CNAME: ${wildcardName} -> ${tunnelTarget}"`,
-          `curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records" \\`,
-          `  -H "Authorization: Bearer ${apiToken}" \\`,
-          `  -H "Content-Type: application/json" \\`,
-          `  --data '{"type":"CNAME","name":"${wildcardName}","content":"${tunnelTarget}","proxied":true,"ttl":1}'`,
-        ];
-      })()
-    : [];
+  const dnsSteps: string[] = [];
 
   return [...commonSteps, ...acmeSteps, ...composeSteps, ...dnsSteps].filter(Boolean).join('\n');
 }

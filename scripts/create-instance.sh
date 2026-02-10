@@ -105,6 +105,52 @@ docker run -d \
   --label "traefik.http.services.${CONTAINER}-terminal.loadbalancer.server.port=7681" \
   "${OPENCLAW_RUNTIME_IMAGE}"
 
+# --- Per-instance tunnel route + DNS (cloudflare-tunnel mode only) ---
+if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
+  : "${OPENCLAW_CLOUDFLARE_ACCOUNT_ID:?Missing OPENCLAW_CLOUDFLARE_ACCOUNT_ID}"
+  : "${OPENCLAW_CLOUDFLARE_API_TOKEN:?Missing OPENCLAW_CLOUDFLARE_API_TOKEN}"
+  : "${OPENCLAW_CLOUDFLARE_ZONE_ID:?Missing OPENCLAW_CLOUDFLARE_ZONE_ID}"
+  : "${OPENCLAW_CLOUDFLARE_TUNNEL_ID:?Missing OPENCLAW_CLOUDFLARE_TUNNEL_ID}"
+
+  CF_API="https://api.cloudflare.com/client/v4"
+  AUTH_HEADER="Authorization: Bearer ${OPENCLAW_CLOUDFLARE_API_TOKEN}"
+  TUNNEL_CFG_URL="${CF_API}/accounts/${OPENCLAW_CLOUDFLARE_ACCOUNT_ID}/tunnels/${OPENCLAW_CLOUDFLARE_TUNNEL_ID}/configurations"
+
+  # 1. GET current tunnel config
+  CURRENT_CONFIG=$(curl -sS -X GET "${TUNNEL_CFG_URL}" \
+    -H "${AUTH_HEADER}")
+
+  # 2. Add ingress rule for this instance before the catch-all
+  UPDATED_INGRESS=$(echo "${CURRENT_CONFIG}" | jq --arg hostname "${HOSTNAME}" --arg service "http://traefik:80" '
+    .result.config.ingress
+    | [.[] | select(.hostname != $hostname)]
+    | if (.[-1].hostname // null) == null then
+        .[:-1] + [{"hostname": $hostname, "service": $service}] + .[-1:]
+      else
+        . + [{"hostname": $hostname, "service": $service}, {"service": "http_status:404"}]
+      end
+  ')
+
+  UPDATED_CONFIG=$(echo "${CURRENT_CONFIG}" | jq --argjson ingress "${UPDATED_INGRESS}" '
+    .result.config | .ingress = $ingress
+  ')
+
+  # 3. PUT updated tunnel config
+  echo "Adding tunnel ingress rule for ${HOSTNAME}…"
+  curl -sS -X PUT "${TUNNEL_CFG_URL}" \
+    -H "${AUTH_HEADER}" \
+    -H "Content-Type: application/json" \
+    --data "{\"config\": ${UPDATED_CONFIG}}" > /dev/null
+
+  # 4. Create per-instance CNAME DNS record
+  TUNNEL_TARGET="${OPENCLAW_CLOUDFLARE_TUNNEL_ID}.cfargotunnel.com"
+  echo "Creating DNS CNAME: ${HOSTNAME} -> ${TUNNEL_TARGET}"
+  curl -sS -X POST "${CF_API}/zones/${OPENCLAW_CLOUDFLARE_ZONE_ID}/dns_records" \
+    -H "${AUTH_HEADER}" \
+    -H "Content-Type: application/json" \
+    --data "{\"type\":\"CNAME\",\"name\":\"${HOSTNAME}\",\"content\":\"${TUNNEL_TARGET}\",\"proxied\":true,\"ttl\":1}" > /dev/null
+fi
+
 echo
 echo "Instance created: ${INSTANCE_ID}"
 echo "Terminal URL:"

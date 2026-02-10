@@ -39,19 +39,6 @@ export function buildCreateDnsRecordRequest(
   };
 }
 
-/** Convenience: creates "*.{wildcardDomain}" CNAME pointing to tunnel */
-export function buildCreateWildcardDnsRecordRequest(
-  config: CloudflareApiConfig,
-  wildcardDomain: string,
-  tunnelCname: string
-): CloudflareApiRequest {
-  return buildCreateDnsRecordRequest(config, {
-    name: `*.${wildcardDomain}`,
-    target: tunnelCname,
-    proxied: true,
-  });
-}
-
 /** GET /zones/{zoneId}/dns_records with optional name filter */
 export function buildListDnsRecordsRequest(
   config: CloudflareApiConfig,

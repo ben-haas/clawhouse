@@ -40,12 +40,6 @@ const cfScript = buildProvisionScript({
     cloudflaredImage: 'cloudflare/cloudflared:latest',
     enableDashboard: false,
   },
-  cloudflareDns: {
-    apiToken: 'test-api-token',
-    zoneId: 'test-zone-id',
-    tunnelId: 'test-tunnel-id',
-    baseDomain: 'example.com',
-  },
   openclawRuntimeImage: 'openclaw-ttyd:local',
   composePath: '/opt/traefik/docker-compose.yml',
 });
@@ -65,11 +59,14 @@ if (cfScript.includes('acme')) {
 if (cfScript.includes('vercel')) {
   throw new Error('[cloudflare-tunnel] Should NOT contain vercel in CF tunnel mode');
 }
-if (!cfScript.includes('*.example.com')) {
-  throw new Error('[cloudflare-tunnel] Expected wildcard DNS record creation');
+if (cfScript.includes('*.example.com')) {
+  throw new Error('[cloudflare-tunnel] Should NOT contain wildcard DNS creation');
 }
-if (!cfScript.includes('test-tunnel-id.cfargotunnel.com')) {
-  throw new Error('[cloudflare-tunnel] Expected tunnel CNAME target in DNS creation');
+if (cfScript.includes('cfargotunnel.com')) {
+  throw new Error('[cloudflare-tunnel] Should NOT contain tunnel CNAME in provision script');
+}
+if (!cfScript.includes('jq')) {
+  throw new Error('[cloudflare-tunnel] Expected jq in package install');
 }
 
 console.log('OK: cloudflare-tunnel mode');

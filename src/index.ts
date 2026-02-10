@@ -13,10 +13,15 @@ export type { CloudflareTunnelComposeInput } from './core/cloudflared';
 export {
   buildTunnelCname,
   buildCreateDnsRecordRequest,
-  buildCreateWildcardDnsRecordRequest,
   buildListDnsRecordsRequest,
   buildDeleteDnsRecordRequest,
 } from './core/cloudflareDns';
 export type { CloudflareApiConfig, CloudflareApiRequest } from './core/cloudflareDns';
+export {
+  buildGetTunnelConfigRequest,
+  buildPutTunnelConfigRequest,
+  addIngressRule,
+} from './core/cloudflareTunnel';
+export type { CloudflareTunnelApiConfig, TunnelIngressRule } from './core/cloudflareTunnel';
 export { generateTerminalToken, validateTerminalToken } from './core/terminalToken';
 export type { TerminalTokenOptions } from './core/terminalToken';

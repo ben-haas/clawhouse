@@ -30,9 +30,6 @@ fi
 # --- Mode-specific validation ---
 if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
   : "${OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN:?Missing OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN}"
-  : "${OPENCLAW_CLOUDFLARE_API_TOKEN:?Missing OPENCLAW_CLOUDFLARE_API_TOKEN}"
-  : "${OPENCLAW_CLOUDFLARE_ZONE_ID:?Missing OPENCLAW_CLOUDFLARE_ZONE_ID}"
-  : "${OPENCLAW_CLOUDFLARE_TUNNEL_ID:?Missing OPENCLAW_CLOUDFLARE_TUNNEL_ID}"
 else
   : "${OPENCLAW_ACME_EMAIL:?Missing OPENCLAW_ACME_EMAIL}"
   : "${OPENCLAW_VERCEL_API_TOKEN:?Missing OPENCLAW_VERCEL_API_TOKEN}"
@@ -41,7 +38,7 @@ fi
 # --- Common: install Docker & compose plugin ---
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl gnupg lsb-release
+apt-get install -y ca-certificates curl gnupg jq lsb-release
 
 if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh
@@ -69,27 +66,8 @@ if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
   # Ensure the network is always named `traefik_default` (matches instance labels).
   docker compose -p traefik --env-file .env -f deploy/cloudflare-tunnel/docker-compose.yml up -d --build
 
-  # --- Create wildcard DNS record pointing to the tunnel ---
-  WILDCARD_NAME="*.${OPENCLAW_BASE_DOMAIN}"
-  TUNNEL_TARGET="${OPENCLAW_CLOUDFLARE_TUNNEL_ID}.cfargotunnel.com"
-
   echo
   echo "Traefik + cloudflared are up."
-  echo "Creating wildcard DNS CNAME: ${WILDCARD_NAME} -> ${TUNNEL_TARGET}"
-
-  RESPONSE=$(curl -sS -X POST \
-    "https://api.cloudflare.com/client/v4/zones/${OPENCLAW_CLOUDFLARE_ZONE_ID}/dns_records" \
-    -H "Authorization: Bearer ${OPENCLAW_CLOUDFLARE_API_TOKEN}" \
-    -H "Content-Type: application/json" \
-    --data "{
-      \"type\": \"CNAME\",
-      \"name\": \"${WILDCARD_NAME}\",
-      \"content\": \"${TUNNEL_TARGET}\",
-      \"proxied\": true,
-      \"ttl\": 1
-    }")
-
-  echo "${RESPONSE}"
 else
   mkdir -p /opt/traefik
   touch /opt/traefik/acme.json
