@@ -16,6 +16,7 @@ services:
       - "--entrypoints.websecure.http.tls.domains[0].main=${OPENCLAW_WILDCARD_DOMAIN}"
       - "--entrypoints.websecure.http.tls.domains[0].sans=*.${OPENCLAW_WILDCARD_DOMAIN}"
     environment:
+      - DOCKER_API_VERSION=1.45
       - VERCEL_API_TOKEN=${OPENCLAW_VERCEL_API_TOKEN}
       - VERCEL_TEAM_ID=${OPENCLAW_VERCEL_TEAM_ID}
     ports:

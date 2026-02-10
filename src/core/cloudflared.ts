@@ -28,6 +28,8 @@ export function buildCloudflareTunnelComposeYaml(input: CloudflareTunnelComposeI
     '      - "--providers.docker.exposedbydefault=false"',
     '      - "--entrypoints.web.address=:80"',
     dashboardCmd,
+    '    environment:',
+    '      - DOCKER_API_VERSION=1.45',
     '    ports:',
     '      - "80:80"',
     dashboardPort,
