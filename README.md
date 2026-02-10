@@ -154,7 +154,6 @@ cp .env.example .env
 Edit `.env`:
 ```bash
 OPENCLAW_BASE_DOMAIN=example.com
-OPENCLAW_HOST_SHARD=h1
 OPENCLAW_TTYD_SECRET=some_long_random_string
 
 OPENCLAW_DEPLOY_MODE=cloudflare-tunnel
@@ -180,7 +179,7 @@ Then add the public hostname in Cloudflare:
 1. Go to [Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Connectors** → click your connector → **Edit**
 2. Go to the **Public Application Routes** tab → **Add a public hostname**
 3. Fill in:
-   - **Subdomain:** `*.h1.openclaw` (adjust to match your shard and subdomain)
+   - **Subdomain:** `*`
    - **Domain:** `example.com` (your base domain)
    - **Type:** HTTP
    - **URL:** `traefik:80`
@@ -204,11 +203,12 @@ sudo ./scripts/create-instance.sh charlie
 Get the URLs to send them:
 ```bash
 ./scripts/terminal-url.sh alice
-# https://openclaw-alice.h1.openclaw.example.com/terminal?token=...
-
 sudo ./scripts/dashboard-url.sh alice
-# https://openclaw-alice.h1.openclaw.example.com/overview?token=...
 ```
+
+The URLs depend on your deploy mode:
+- **Traefik:** `https://openclaw-alice.h1.openclaw.example.com/`
+- **Cloudflare Tunnel:** `https://openclaw-alice.example.com/`
 
 Send your friend their terminal URL. They open it in a browser and get a full web terminal. The dashboard URL gives them the OpenClaw control panel.
 
