@@ -1,18 +1,32 @@
-import { buildTraefikComposeYaml } from './traefik';
+import { buildTraefikComposeYaml, TraefikComposeInput } from './traefik';
+import { buildCloudflareTunnelComposeYaml, CloudflareTunnelComposeInput } from './cloudflared';
+import { DeployMode } from './deployMode';
 
-export interface ProvisionScriptInput {
-  traefikCompose: Parameters<typeof buildTraefikComposeYaml>[0];
-  openclawRuntimeImage?: string;
-  composePath?: string;
-}
+export type ProvisionScriptInput =
+  | {
+      deployMode?: 'traefik';
+      traefikCompose: TraefikComposeInput;
+      openclawRuntimeImage?: string;
+      composePath?: string;
+    }
+  | {
+      deployMode: 'cloudflare-tunnel';
+      cloudflareTunnelCompose: CloudflareTunnelComposeInput;
+      openclawRuntimeImage?: string;
+      composePath?: string;
+    };
 
 export function buildProvisionScript(input: ProvisionScriptInput): string {
+  const deployMode: DeployMode = input.deployMode || 'traefik';
   const composePath = input.composePath || '/opt/traefik/docker-compose.yml';
-  const composeYaml = buildTraefikComposeYaml(input.traefikCompose);
   const sudoLiteral = '${SUDO}';
   const dockerPull = input.openclawRuntimeImage ? `${sudoLiteral} docker pull ${input.openclawRuntimeImage}` : '';
 
-  return [
+  const composeYaml = deployMode === 'cloudflare-tunnel'
+    ? buildCloudflareTunnelComposeYaml((input as { cloudflareTunnelCompose: CloudflareTunnelComposeInput }).cloudflareTunnelCompose)
+    : buildTraefikComposeYaml((input as { traefikCompose: TraefikComposeInput }).traefikCompose);
+
+  const commonSteps = [
     'set -euo pipefail',
     'export DEBIAN_FRONTEND=noninteractive',
     'if [ "$(id -u)" -ne 0 ]; then SUDO="sudo -n"; else SUDO=""; fi',
@@ -30,13 +44,21 @@ export function buildProvisionScript(input: ProvisionScriptInput): string {
     'JSON',
     '  ${SUDO} systemctl restart docker',
     'fi',
+  ];
+
+  const acmeSteps = deployMode === 'traefik' ? [
     '${SUDO} mkdir -p /opt/traefik',
     '${SUDO} touch /opt/traefik/acme.json',
     '${SUDO} chmod 600 /opt/traefik/acme.json',
+  ] : [];
+
+  const composeSteps = [
     `${sudoLiteral} tee ${composePath} >/dev/null <<'YAML'`,
     composeYaml,
     'YAML',
     `${sudoLiteral} docker compose -f ${composePath} up -d`,
     dockerPull,
-  ].filter(Boolean).join('\n');
+  ];
+
+  return [...commonSteps, ...acmeSteps, ...composeSteps].filter(Boolean).join('\n');
 }

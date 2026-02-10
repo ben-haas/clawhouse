@@ -22,6 +22,7 @@ fi
 : "${OPENCLAW_BASE_DOMAIN:?Missing OPENCLAW_BASE_DOMAIN}"
 : "${OPENCLAW_HOST_SHARD:?Missing OPENCLAW_HOST_SHARD}"
 
+OPENCLAW_DEPLOY_MODE="${OPENCLAW_DEPLOY_MODE:-traefik}"
 OPENCLAW_SUBDOMAIN="${OPENCLAW_SUBDOMAIN:-openclaw}"
 OPENCLAW_RUNTIME_IMAGE="${OPENCLAW_RUNTIME_IMAGE:-openclaw-ttyd:local}"
 
@@ -43,6 +44,27 @@ chown 1000:1000 "${DATA_DIR}"
 
 docker pull "${OPENCLAW_RUNTIME_IMAGE}" >/dev/null 2>&1 || true
 
+# --- Select entrypoint and TLS labels based on deploy mode ---
+if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
+  ENTRYPOINT="web"
+  MAIN_TLS_LABELS=()
+  TERMINAL_TLS_LABELS=()
+else
+  ENTRYPOINT="websecure"
+  MAIN_TLS_LABELS=(
+    --label "traefik.http.routers.${CONTAINER}.tls=true"
+    --label "traefik.http.routers.${CONTAINER}.tls.certresolver=le"
+    --label "traefik.http.routers.${CONTAINER}.tls.domains[0].main=${WILDCARD_DOMAIN}"
+    --label "traefik.http.routers.${CONTAINER}.tls.domains[0].sans=*.${WILDCARD_DOMAIN}"
+  )
+  TERMINAL_TLS_LABELS=(
+    --label "traefik.http.routers.${CONTAINER}-terminal.tls=true"
+    --label "traefik.http.routers.${CONTAINER}-terminal.tls.certresolver=le"
+    --label "traefik.http.routers.${CONTAINER}-terminal.tls.domains[0].main=${WILDCARD_DOMAIN}"
+    --label "traefik.http.routers.${CONTAINER}-terminal.tls.domains[0].sans=*.${WILDCARD_DOMAIN}"
+  )
+fi
+
 docker run -d \
   --name "${CONTAINER}" \
   --restart unless-stopped \
@@ -57,20 +79,14 @@ docker run -d \
   --label "traefik.docker.network=${NETWORK}" \
   --label "traefik.http.routers.${CONTAINER}.rule=Host(\`${HOSTNAME}\`)" \
   --label "traefik.http.routers.${CONTAINER}.service=${CONTAINER}" \
-  --label "traefik.http.routers.${CONTAINER}.entrypoints=websecure" \
-  --label "traefik.http.routers.${CONTAINER}.tls=true" \
-  --label "traefik.http.routers.${CONTAINER}.tls.certresolver=le" \
-  --label "traefik.http.routers.${CONTAINER}.tls.domains[0].main=${WILDCARD_DOMAIN}" \
-  --label "traefik.http.routers.${CONTAINER}.tls.domains[0].sans=*.${WILDCARD_DOMAIN}" \
+  --label "traefik.http.routers.${CONTAINER}.entrypoints=${ENTRYPOINT}" \
+  "${MAIN_TLS_LABELS[@]}" \
   --label "traefik.http.services.${CONTAINER}.loadbalancer.server.port=18789" \
   --label "traefik.http.routers.${CONTAINER}-terminal.rule=Host(\`${HOSTNAME}\`) && PathPrefix(\`/terminal\`)" \
   --label "traefik.http.routers.${CONTAINER}-terminal.service=${CONTAINER}-terminal" \
   --label "traefik.http.routers.${CONTAINER}-terminal.priority=100" \
-  --label "traefik.http.routers.${CONTAINER}-terminal.entrypoints=websecure" \
-  --label "traefik.http.routers.${CONTAINER}-terminal.tls=true" \
-  --label "traefik.http.routers.${CONTAINER}-terminal.tls.certresolver=le" \
-  --label "traefik.http.routers.${CONTAINER}-terminal.tls.domains[0].main=${WILDCARD_DOMAIN}" \
-  --label "traefik.http.routers.${CONTAINER}-terminal.tls.domains[0].sans=*.${WILDCARD_DOMAIN}" \
+  --label "traefik.http.routers.${CONTAINER}-terminal.entrypoints=${ENTRYPOINT}" \
+  "${TERMINAL_TLS_LABELS[@]}" \
   --label "traefik.http.middlewares.${CONTAINER}-terminal-strip.stripprefix.prefixes=/terminal" \
   --label "traefik.http.middlewares.${CONTAINER}-terminal-strip.stripprefix.forceSlash=true" \
   --label "traefik.http.middlewares.${CONTAINER}-inject-id.headers.customrequestheaders.X-Openclaw-Instance-Id=${INSTANCE_ID}" \

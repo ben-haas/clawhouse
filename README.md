@@ -53,6 +53,15 @@ To stop everything:
 
 This is the real setup. You run one server, and each friend gets their own subdomain with HTTPS.
 
+There are two ways to get traffic to your server. Pick whichever fits your situation:
+
+| | **Option A: Direct with Traefik** | **Option B: Cloudflare Tunnel** |
+|---|---|---|
+| **Best for** | VPS / cloud VM with a public IP | Home servers, machines behind NAT, no static IP |
+| **Open ports** | Port 443 must be open | None — traffic flows through Cloudflare's network |
+| **TLS certificates** | Let's Encrypt via Traefik (DNS-01 challenge) | Handled by Cloudflare automatically |
+| **DNS provider** | Vercel | Cloudflare (free) |
+
 ### How many friends?
 
 Rule of thumb: **each instance needs ~4 GB RAM**.
@@ -64,7 +73,13 @@ Rule of thumb: **each instance needs ~4 GB RAM**.
 | 32 GB RAM | ~8 |
 | 64 GB RAM | ~16 |
 
-### What you need
+---
+
+### Option A: Direct Server with Traefik
+
+Traditional setup: your server has a public IP, Traefik handles TLS with Let's Encrypt certificates.
+
+#### What you need
 
 1. A Linux VM (Ubuntu/Debian) with port **443** open (Docker is installed automatically)
 2. A domain with **DNS managed by [Vercel](https://vercel.com/docs/projects/domains)** (e.g. `example.com`)
@@ -74,7 +89,7 @@ Rule of thumb: **each instance needs ~4 GB RAM**.
    ```
 4. A **[Vercel API token](https://vercel.com/account/tokens)** — Traefik uses this to automatically prove you own the domain and get wildcard SSL certificates (via DNS-01 challenge). This is why your DNS needs to be on Vercel.
 
-### Setup
+#### Setup
 
 ```bash
 git clone https://github.com/Agent-3-7/openclaw-host-kit
@@ -95,6 +110,89 @@ Provision the server (installs Docker, starts Traefik reverse proxy):
 ```bash
 sudo ./scripts/provision-host.sh
 ```
+
+---
+
+### Option B: Cloudflare Tunnel
+
+No public IP or open ports needed. Cloudflare handles TLS and routes traffic through an encrypted tunnel to your machine.
+
+#### What you need
+
+1. A Linux machine (Ubuntu/Debian) — Docker is installed automatically
+2. A domain with **DNS on [Cloudflare](https://dash.cloudflare.com/)** (free plan works)
+3. A Cloudflare account with access to [Zero Trust](https://one.dash.cloudflare.com/)
+
+#### 1. Create a Cloudflare Tunnel
+
+1. Go to [Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Tunnels**
+2. Click **Create a tunnel** → choose **Cloudflared** as the connector
+3. Give it a name (e.g. `openclaw-h1`)
+4. On the Install Connector page, copy the **tunnel token** (the long string after `--token`). You don't need to install the connector on your machine — the Docker setup handles that.
+5. Click **Next** to skip to the Public Hostname tab, but don't add a hostname yet — we'll do that after provisioning
+
+Note the **Tunnel ID** shown on the tunnel overview page (a UUID like `abcd1234-...`).
+
+#### 2. Get your Zone ID and API token
+
+**Zone ID:**
+- Go to the [Cloudflare dashboard](https://dash.cloudflare.com/) → select your domain
+- The **Zone ID** is on the right sidebar of the Overview page
+
+**API Token:**
+- Go to **My Profile** → [**API Tokens**](https://dash.cloudflare.com/profile/api-tokens) → **Create Token**
+- Use the **Edit zone DNS** template
+- Scope it to your specific domain under **Zone Resources**
+- Create the token and copy it
+
+#### 3. Configure and provision
+
+```bash
+git clone https://github.com/Agent-3-7/openclaw-host-kit
+cd openclaw-host-kit
+cp .env.example .env
+```
+
+Edit `.env`:
+```bash
+OPENCLAW_BASE_DOMAIN=example.com
+OPENCLAW_HOST_SHARD=h1
+OPENCLAW_TTYD_SECRET=some_long_random_string
+
+OPENCLAW_DEPLOY_MODE=cloudflare-tunnel
+OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoiYWJj...   # from step 1
+OPENCLAW_CLOUDFLARE_API_TOKEN=your_api_token        # from step 2
+OPENCLAW_CLOUDFLARE_ZONE_ID=your_zone_id            # from step 2
+OPENCLAW_CLOUDFLARE_TUNNEL_ID=abcd1234-...          # from step 1
+```
+
+Provision the server (installs Docker, starts Traefik + cloudflared):
+```bash
+sudo ./scripts/provision-host.sh
+```
+
+#### 4. Set up DNS and tunnel routing
+
+Create the wildcard DNS record (CNAME pointing to your tunnel):
+```bash
+./scripts/cf-dns-create-wildcard.sh
+```
+
+Then add the public hostname in Cloudflare:
+1. Go to [Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Tunnels** → click your tunnel → **Edit**
+2. Go to the **Public Hostname** tab → **Add a public hostname**
+3. Fill in:
+   - **Subdomain:** `*.h1.openclaw` (adjust to match your shard and subdomain)
+   - **Domain:** `example.com` (your base domain)
+   - **Type:** HTTP
+   - **URL:** `traefik:80`
+4. Save
+
+#### 5. Create instances
+
+From here it's the same as Option A — [jump to creating instances](#create-instances-for-your-friends).
+
+---
 
 ### Create instances for your friends
 
@@ -120,6 +218,8 @@ Send your friend their terminal URL. They open it in a browser and get a full we
 
 ## How It Works
 
+**Direct (Traefik) mode:**
+
 ```mermaid
 flowchart LR
   U[Browser] -->|https :443| T[Traefik]
@@ -128,7 +228,20 @@ flowchart LR
   FA -->|valid token| TT[Web terminal]
 ```
 
-- **Traefik** sits at the front, handles HTTPS and routes each subdomain to the right container
+**Cloudflare Tunnel mode:**
+
+```mermaid
+flowchart LR
+  U[Browser] -->|https| CF[Cloudflare edge]
+  CF -->|tunnel| CD[cloudflared]
+  CD -->|http :80| T[Traefik]
+  T -->|/| G[OpenClaw gateway]
+  T -->|/terminal| FA[Token check]
+  FA -->|valid token| TT[Web terminal]
+```
+
+- **Traefik** sits at the front, handles routing each subdomain to the right container (and TLS in direct mode)
+- **cloudflared** (tunnel mode only) connects to Cloudflare's edge and forwards traffic to Traefik over the local Docker network
 - **Each instance** is a Docker container running the OpenClaw gateway + a web terminal ([ttyd](https://github.com/tsl0922/ttyd))
 - **Terminal auth** uses HMAC tokens with a 24-hour TTL — random people can't get a shell even if they guess the hostname
 - **Each container** gets its own CPU, memory, and PID limits so one instance can't take down the server
@@ -140,19 +253,21 @@ flowchart LR
 
 ```
 scripts/
-  local-up.sh             # 1-command local demo
-  local-down.sh           # tear down local demo
-  provision-host.sh       # set up a server (installs Docker + Traefik)
-  create-instance.sh      # spin up an instance on the server
-  terminal-url.sh         # print terminal URL for an instance
-  dashboard-url.sh        # print dashboard URL for an instance
-  terminal-token.sh       # generate a terminal auth token
+  local-up.sh                # 1-command local demo
+  local-down.sh              # tear down local demo
+  provision-host.sh          # set up a server (installs Docker + Traefik/cloudflared)
+  create-instance.sh         # spin up an instance on the server
+  terminal-url.sh            # print terminal URL for an instance
+  dashboard-url.sh           # print dashboard URL for an instance
+  terminal-token.sh          # generate a terminal auth token
+  cf-dns-create-wildcard.sh  # create wildcard CNAME via Cloudflare API
 docker/
-  openclaw-ttyd/          # runtime image (OpenClaw + web terminal)
-  forward-auth/           # tiny token-validation service (~90 lines of JS)
+  openclaw-ttyd/             # runtime image (OpenClaw + web terminal)
+  forward-auth/              # tiny token-validation service (~90 lines of JS)
 deploy/
-  traefik/                # docker-compose for the reverse proxy
-src/                      # TypeScript library (used by the managed hosting platform)
+  traefik/                   # docker-compose for direct mode (Traefik + Let's Encrypt)
+  cloudflare-tunnel/         # docker-compose for tunnel mode (Traefik + cloudflared)
+src/                         # TypeScript library (used by the managed hosting platform)
 ```
 
 ## Notes

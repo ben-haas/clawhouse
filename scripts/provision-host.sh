@@ -13,15 +13,25 @@ if [ -f .env ]; then
   source .env
 fi
 
+OPENCLAW_DEPLOY_MODE="${OPENCLAW_DEPLOY_MODE:-traefik}"
+
+# --- Vars required in ALL modes ---
 : "${OPENCLAW_BASE_DOMAIN:?Missing OPENCLAW_BASE_DOMAIN}"
 : "${OPENCLAW_HOST_SHARD:?Missing OPENCLAW_HOST_SHARD}"
-: "${OPENCLAW_ACME_EMAIL:?Missing OPENCLAW_ACME_EMAIL}"
-: "${OPENCLAW_VERCEL_API_TOKEN:?Missing OPENCLAW_VERCEL_API_TOKEN}"
 : "${OPENCLAW_TTYD_SECRET:?Missing OPENCLAW_TTYD_SECRET}"
 
 OPENCLAW_SUBDOMAIN="${OPENCLAW_SUBDOMAIN:-openclaw}"
 export OPENCLAW_WILDCARD_DOMAIN="${OPENCLAW_HOST_SHARD}.${OPENCLAW_SUBDOMAIN}.${OPENCLAW_BASE_DOMAIN}"
 
+# --- Mode-specific validation ---
+if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
+  : "${OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN:?Missing OPENCLAW_CLOUDFLARE_TUNNEL_TOKEN}"
+else
+  : "${OPENCLAW_ACME_EMAIL:?Missing OPENCLAW_ACME_EMAIL}"
+  : "${OPENCLAW_VERCEL_API_TOKEN:?Missing OPENCLAW_VERCEL_API_TOKEN}"
+fi
+
+# --- Common: install Docker & compose plugin ---
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y ca-certificates curl gnupg lsb-release
@@ -36,13 +46,24 @@ if ! docker compose version >/dev/null 2>&1; then
   apt-get install -y docker-compose-plugin
 fi
 
-mkdir -p /opt/traefik
-touch /opt/traefik/acme.json
-chmod 600 /opt/traefik/acme.json
+# --- Mode-specific setup ---
+if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
+  # Ensure the network is always named `traefik_default` (matches instance labels).
+  docker compose -p traefik -f deploy/cloudflare-tunnel/docker-compose.yml up -d --build
 
-# Ensure the network is always named `traefik_default` (matches instance labels).
-docker compose -p traefik -f deploy/traefik/docker-compose.yml up -d --build
+  echo
+  echo "Traefik + cloudflared are up."
+  echo "Expected wildcard DNS (CNAME): *.${OPENCLAW_WILDCARD_DOMAIN} -> <tunnel-id>.cfargotunnel.com"
+  echo "Run scripts/cf-dns-create-wildcard.sh to create the DNS record via Cloudflare API."
+else
+  mkdir -p /opt/traefik
+  touch /opt/traefik/acme.json
+  chmod 600 /opt/traefik/acme.json
 
-echo
-echo "Traefik is up."
-echo "Expected wildcard DNS (A record): *.${OPENCLAW_WILDCARD_DOMAIN} -> <this host IP>"
+  # Ensure the network is always named `traefik_default` (matches instance labels).
+  docker compose -p traefik -f deploy/traefik/docker-compose.yml up -d --build
+
+  echo
+  echo "Traefik is up."
+  echo "Expected wildcard DNS (A record): *.${OPENCLAW_WILDCARD_DOMAIN} -> <this host IP>"
+fi
