@@ -42,6 +42,17 @@ fi
 
 systemctl enable --now docker
 
+# Ensure the Docker daemon accepts API v1.24+ (Traefik v3.x hardcodes v1.24)
+DAEMON_JSON="/etc/docker/daemon.json"
+if [[ ! -s "${DAEMON_JSON}" ]] || [[ "$(tr -d ' \n\t' < "${DAEMON_JSON}" 2>/dev/null || echo '')" == "{}" ]]; then
+  tee "${DAEMON_JSON}" >/dev/null <<'JSON'
+{
+  "min-api-version": "1.24"
+}
+JSON
+  systemctl restart docker
+fi
+
 if ! docker compose version >/dev/null 2>&1; then
   apt-get install -y docker-compose-plugin
 fi

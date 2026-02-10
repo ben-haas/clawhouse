@@ -23,7 +23,6 @@ docker run -d \
   --network "${NETWORK}" \
   -p "${PORT}:8080" \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  -e DOCKER_API_VERSION=1.45 \
   traefik:v3.1 \
   --providers.docker=true \
   --providers.docker.exposedbydefault=false \

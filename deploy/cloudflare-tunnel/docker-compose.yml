@@ -7,8 +7,6 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
-    environment:
-      - DOCKER_API_VERSION=1.45
     ports:
       - "80:80"
     volumes:
