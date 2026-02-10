@@ -11,7 +11,7 @@ export interface DockerResourceLimits {
 export interface BuildDockerRunCommandInput extends DockerResourceLimits {
   instanceId: string;
   runtimeImage: string;
-  hostShard: string;
+  hostShard?: string;
   baseDomain: string;
   subdomain?: string;
   terminalToken: string;
@@ -71,11 +71,13 @@ export function buildDockerRunCommand(input: BuildDockerRunCommandInput): Docker
 
   const urls: InstanceUrls = buildInstanceUrls({
     instanceId: input.instanceId,
-    hostShard: input.hostShard,
     baseDomain: input.baseDomain,
-    subdomain: input.subdomain,
     terminalToken: input.terminalToken,
     instancePrefix: containerNamePrefix,
+    ...(isCloudflare ? {} : {
+      hostShard: input.hostShard,
+      subdomain: input.subdomain,
+    }),
   });
 
   const containerName = `${containerNamePrefix}${input.instanceId}`;
