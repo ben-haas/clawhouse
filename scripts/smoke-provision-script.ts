@@ -1,4 +1,4 @@
-import { buildProvisionScript } from '../src/index';
+import { buildProvisionScript, buildInstanceUrls } from '../src/index';
 
 // --- Test 1: Traefik mode (existing behavior) ---
 const traefikScript = buildProvisionScript({
@@ -34,7 +34,6 @@ const cfScript = buildProvisionScript({
   deployMode: 'cloudflare-tunnel',
   cloudflareTunnelCompose: {
     tunnelToken: 'test-tunnel-token',
-    wildcardDomain: 'h1.openclaw.example.com',
     ttydSecret: 'test-secret',
     ttydTtlSeconds: 86400,
     traefikImage: 'traefik:v3.1',
@@ -62,3 +61,25 @@ if (cfScript.includes('vercel')) {
 }
 
 console.log('OK: cloudflare-tunnel mode');
+
+// --- Test 3: URL construction — Traefik (multi-level) ---
+const traefikUrls = buildInstanceUrls({
+  instanceId: 'alice', baseDomain: 'example.com',
+  hostShard: 'h1', terminalToken: 'tok',
+});
+if (traefikUrls.hostName !== 'openclaw-alice.h1.openclaw.example.com') {
+  throw new Error(`Expected multi-level URL, got: ${traefikUrls.hostName}`);
+}
+
+console.log('OK: traefik URL construction');
+
+// --- Test 4: URL construction — Cloudflare (flat) ---
+const cfUrls = buildInstanceUrls({
+  instanceId: 'alice', baseDomain: 'example.com',
+  terminalToken: 'tok',
+});
+if (cfUrls.hostName !== 'openclaw-alice.example.com') {
+  throw new Error(`Expected flat URL, got: ${cfUrls.hostName}`);
+}
+
+console.log('OK: cloudflare URL construction');
