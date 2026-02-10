@@ -118,32 +118,47 @@ if [ "${OPENCLAW_DEPLOY_MODE}" = "cloudflare-tunnel" ]; then
 
   cf_check() {
     local response="$1" action="$2"
-    if [ "$(echo "$response" | jq -r '.success')" != "true" ]; then
+    if [ "$(echo "$response" | jq -r '.success // empty' 2>/dev/null)" != "true" ]; then
       echo "Cloudflare API error (${action}):" >&2
-      echo "$response" | jq -r '.errors[] | "  [\(.code)] \(.message)"' >&2
+      echo "$response" | jq -r '.errors[]? | "  [\(.code)] \(.message)"' 2>/dev/null >&2
+      echo "  Response: ${response}" >&2
       exit 1
     fi
   }
 
-  # 1. GET current tunnel config
-  CURRENT_CONFIG=$(curl -sS -X GET "${TUNNEL_CFG_URL}" \
+  # 1. GET current tunnel config (404 means no config exists yet)
+  CFG_HTTP_CODE=$(curl -sS -o /tmp/cf_tunnel_cfg.json -w "%{http_code}" -X GET "${TUNNEL_CFG_URL}" \
     -H "${AUTH_HEADER}")
-  cf_check "$CURRENT_CONFIG" "get tunnel config"
 
-  # 2. Add ingress rule for this instance before the catch-all
-  UPDATED_INGRESS=$(echo "${CURRENT_CONFIG}" | jq --arg hostname "${HOSTNAME}" --arg service "http://traefik:80" '
-    .result.config.ingress
-    | [.[] | select(.hostname != $hostname)]
-    | if (.[-1].hostname // null) == null then
-        .[:-1] + [{"hostname": $hostname, "service": $service}] + .[-1:]
-      else
-        . + [{"hostname": $hostname, "service": $service}, {"service": "http_status:404"}]
-      end
-  ')
-
-  UPDATED_CONFIG=$(echo "${CURRENT_CONFIG}" | jq --argjson ingress "${UPDATED_INGRESS}" '
-    .result.config | .ingress = $ingress
-  ')
+  if [ "$CFG_HTTP_CODE" = "200" ]; then
+    CURRENT_CONFIG=$(cat /tmp/cf_tunnel_cfg.json)
+    cf_check "$CURRENT_CONFIG" "get tunnel config"
+    # Add ingress rule for this instance before the catch-all
+    UPDATED_INGRESS=$(echo "${CURRENT_CONFIG}" | jq --arg hostname "${HOSTNAME}" --arg service "http://traefik:80" '
+      .result.config.ingress
+      | [.[] | select(.hostname != $hostname)]
+      | if (.[-1].hostname // null) == null then
+          .[:-1] + [{"hostname": $hostname, "service": $service}] + .[-1:]
+        else
+          . + [{"hostname": $hostname, "service": $service}, {"service": "http_status:404"}]
+        end
+    ')
+    UPDATED_CONFIG=$(echo "${CURRENT_CONFIG}" | jq --argjson ingress "${UPDATED_INGRESS}" '
+      .result.config | .ingress = $ingress
+    ')
+  elif [ "$CFG_HTTP_CODE" = "404" ]; then
+    # No config exists yet — create a fresh one
+    UPDATED_CONFIG=$(jq -n --arg hostname "${HOSTNAME}" --arg service "http://traefik:80" '{
+      ingress: [
+        {hostname: $hostname, service: $service},
+        {service: "http_status:404"}
+      ]
+    }')
+  else
+    CURRENT_CONFIG=$(cat /tmp/cf_tunnel_cfg.json)
+    cf_check "$CURRENT_CONFIG" "get tunnel config"
+  fi
+  rm -f /tmp/cf_tunnel_cfg.json
 
   # 3. PUT updated tunnel config
   echo "Adding tunnel ingress rule for ${HOSTNAME}…"
