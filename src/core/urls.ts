@@ -1,9 +1,9 @@
 export interface BuildInstanceUrlsInput {
   instanceId: string;
-  hostShard: string;
   baseDomain: string;
-  subdomain?: string;
   terminalToken: string;
+  hostShard?: string;
+  subdomain?: string;
   instancePrefix?: string;
 }
 
@@ -15,10 +15,11 @@ export interface InstanceUrls {
 }
 
 export function buildInstanceUrls(input: BuildInstanceUrlsInput): InstanceUrls {
-  const subdomain = input.subdomain || 'openclaw';
   const instancePrefix = input.instancePrefix || 'openclaw-';
 
-  const wildcardDomain = `${input.hostShard}.${subdomain}.${input.baseDomain}`;
+  const wildcardDomain = input.hostShard
+    ? `${input.hostShard}.${input.subdomain || 'openclaw'}.${input.baseDomain}`
+    : input.baseDomain;
   const hostName = `${instancePrefix}${input.instanceId}.${wildcardDomain}`;
 
   return {

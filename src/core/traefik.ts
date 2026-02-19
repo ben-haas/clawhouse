@@ -21,7 +21,6 @@ export function buildTraefikComposeYaml(input: TraefikComposeInput): string {
   const dashboardPort = enableDashboard ? '      - "8080:8080"' : '';
 
   return [
-    'version: "3.9"',
     'services:',
     '  traefik:',
     `    image: ${traefikImage}`,
@@ -49,5 +48,45 @@ export function buildTraefikComposeYaml(input: TraefikComposeInput): string {
     '    volumes:',
     '      - /var/run/docker.sock:/var/run/docker.sock:ro',
     '      - /opt/traefik/acme.json:/acme.json',
+  ].filter(Boolean).join('\n');
+}
+
+export interface TraefikHttpComposeInput {
+  wildcardDomain: string;
+  enableDashboard?: boolean;
+  traefikImage?: string;
+  entrypointName?: string;
+  entrypointPort?: number;
+}
+
+export function buildTraefikHttpComposeYaml(input: TraefikHttpComposeInput): string {
+  const traefikImage = input.traefikImage || 'traefik:v3.1';
+  const entrypointName = input.entrypointName || 'web';
+  const entrypointPort = input.entrypointPort ?? 80;
+
+  const enableDashboard = !!input.enableDashboard;
+  const dashboardCmd = enableDashboard ? '      - "--api.dashboard=true"' : '';
+  const dashboardPort = enableDashboard ? '      - "8080:8080"' : '';
+
+  return [
+    'services:',
+    '  traefik:',
+    `    image: ${traefikImage}`,
+    '    container_name: traefik',
+    '    restart: unless-stopped',
+    '    command:',
+    '      - "--providers.docker=true"',
+    '      - "--providers.docker.exposedbydefault=false"',
+    `      - "--entrypoints.${entrypointName}.address=:${entrypointPort}"`,
+    dashboardCmd,
+    '    ports:',
+    `      - "${entrypointPort}:${entrypointPort}"`,
+    dashboardPort,
+    '    volumes:',
+    '      - /var/run/docker.sock:/var/run/docker.sock:ro',
+    '',
+    'networks:',
+    '  default:',
+    '    name: traefik_default',
   ].filter(Boolean).join('\n');
 }

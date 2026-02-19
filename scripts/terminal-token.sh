@@ -3,6 +3,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+if [ -f .env ]; then
+  # shellcheck disable=SC1091
+  source .env
+fi
+
 INSTANCE_ID="${1:-}"
 if [ -z "${INSTANCE_ID}" ]; then
   echo "Usage: $0 <instanceId>" >&2

@@ -1,4 +1,5 @@
 import { buildInstanceUrls, InstanceUrls } from './urls';
+import { DeployMode } from './deployMode';
 
 export interface DockerResourceLimits {
   cpuLimit?: string;
@@ -10,12 +11,13 @@ export interface DockerResourceLimits {
 export interface BuildDockerRunCommandInput extends DockerResourceLimits {
   instanceId: string;
   runtimeImage: string;
-  hostShard: string;
+  hostShard?: string;
   baseDomain: string;
   subdomain?: string;
   terminalToken: string;
   authUrl: string;
 
+  deployMode?: DeployMode;
   dockerNetwork?: string;
   entrypoint?: string;
   certResolver?: string;
@@ -51,8 +53,11 @@ const DEFAULTS = {
 } as const;
 
 export function buildDockerRunCommand(input: BuildDockerRunCommandInput): DockerRunResult {
+  const deployMode = input.deployMode || 'traefik';
+  const isCloudflare = deployMode === 'cloudflare-tunnel';
+
   const dockerNetwork = input.dockerNetwork || DEFAULTS.dockerNetwork;
-  const entrypoint = input.entrypoint || DEFAULTS.entrypoint;
+  const entrypoint = input.entrypoint || (isCloudflare ? 'web' : DEFAULTS.entrypoint);
   const certResolver = input.certResolver || DEFAULTS.certResolver;
   const containerNamePrefix = input.containerNamePrefix || DEFAULTS.containerNamePrefix;
   const dataDirBase = input.dataDirBase || DEFAULTS.dataDirBase;
@@ -66,35 +71,41 @@ export function buildDockerRunCommand(input: BuildDockerRunCommandInput): Docker
 
   const urls: InstanceUrls = buildInstanceUrls({
     instanceId: input.instanceId,
-    hostShard: input.hostShard,
     baseDomain: input.baseDomain,
-    subdomain: input.subdomain,
     terminalToken: input.terminalToken,
     instancePrefix: containerNamePrefix,
+    ...(isCloudflare ? {} : {
+      hostShard: input.hostShard,
+      subdomain: input.subdomain,
+    }),
   });
 
   const containerName = `${containerNamePrefix}${input.instanceId}`;
   const dataDir = `${dataDirBase}/${input.instanceId}`;
 
-  const labels = [
+  const labels: string[] = [
     'traefik.enable=true',
     `traefik.docker.network=${dockerNetwork}`,
     `traefik.http.routers.${containerName}.rule=Host(\`${urls.hostName}\`)`,
     `traefik.http.routers.${containerName}.service=${containerName}`,
     `traefik.http.routers.${containerName}.entrypoints=${entrypoint}`,
-    `traefik.http.routers.${containerName}.tls=true`,
-    `traefik.http.routers.${containerName}.tls.certresolver=${certResolver}`,
-    `traefik.http.routers.${containerName}.tls.domains[0].main=${urls.wildcardDomain}`,
-    `traefik.http.routers.${containerName}.tls.domains[0].sans=*.${urls.wildcardDomain}`,
+    ...(!isCloudflare ? [
+      `traefik.http.routers.${containerName}.tls=true`,
+      `traefik.http.routers.${containerName}.tls.certresolver=${certResolver}`,
+      `traefik.http.routers.${containerName}.tls.domains[0].main=${urls.wildcardDomain}`,
+      `traefik.http.routers.${containerName}.tls.domains[0].sans=*.${urls.wildcardDomain}`,
+    ] : []),
     `traefik.http.services.${containerName}.loadbalancer.server.port=${gatewayPort}`,
     `traefik.http.routers.${containerName}-terminal.rule=Host(\`${urls.hostName}\`) && PathPrefix(\`/terminal\`)`,
     `traefik.http.routers.${containerName}-terminal.service=${containerName}-terminal`,
     `traefik.http.routers.${containerName}-terminal.priority=100`,
     `traefik.http.routers.${containerName}-terminal.entrypoints=${entrypoint}`,
-    `traefik.http.routers.${containerName}-terminal.tls=true`,
-    `traefik.http.routers.${containerName}-terminal.tls.certresolver=${certResolver}`,
-    `traefik.http.routers.${containerName}-terminal.tls.domains[0].main=${urls.wildcardDomain}`,
-    `traefik.http.routers.${containerName}-terminal.tls.domains[0].sans=*.${urls.wildcardDomain}`,
+    ...(!isCloudflare ? [
+      `traefik.http.routers.${containerName}-terminal.tls=true`,
+      `traefik.http.routers.${containerName}-terminal.tls.certresolver=${certResolver}`,
+      `traefik.http.routers.${containerName}-terminal.tls.domains[0].main=${urls.wildcardDomain}`,
+      `traefik.http.routers.${containerName}-terminal.tls.domains[0].sans=*.${urls.wildcardDomain}`,
+    ] : []),
     `traefik.http.middlewares.${containerName}-terminal-strip.stripprefix.prefixes=/terminal`,
     `traefik.http.middlewares.${containerName}-terminal-strip.stripprefix.forceSlash=true`,
     `traefik.http.middlewares.${containerName}-inject-id.headers.customrequestheaders.X-Openclaw-Instance-Id=${input.instanceId}`,

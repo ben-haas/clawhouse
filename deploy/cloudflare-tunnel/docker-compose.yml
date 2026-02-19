@@ -1,0 +1,36 @@
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  openclaw-forward-auth:
+    build:
+      context: ../../docker/forward-auth
+    container_name: openclaw-forward-auth
+    restart: unless-stopped
+    environment:
+      - OPENCLAW_TTYD_SECRET=${OPENCLAW_TTYD_SECRET}
+      - OPENCLAW_TTYD_TTL_SECONDS=${OPENCLAW_TTYD_TTL_SECONDS:-86400}
+    labels:
+      - "traefik.enable=false"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - /var/lib/openclaw/cloudflared:/etc/cloudflared:ro
+
+networks:
+  default:
+    name: traefik_default

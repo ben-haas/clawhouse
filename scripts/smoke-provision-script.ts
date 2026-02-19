@@ -1,6 +1,7 @@
-import { buildProvisionScript } from '../src/index';
+import { buildProvisionScript, buildInstanceUrls } from '../src/index';
 
-const script = buildProvisionScript({
+// --- Test 1: Traefik mode (existing behavior) ---
+const traefikScript = buildProvisionScript({
   traefikCompose: {
     acmeEmail: 'you@example.com',
     wildcardDomain: 'h1.openclaw.example.com',
@@ -16,9 +17,86 @@ const script = buildProvisionScript({
   composePath: '/opt/traefik/docker-compose.yml',
 });
 
-if (!script.includes('docker compose')) {
-  throw new Error('Expected docker compose commands in provision script');
+if (!traefikScript.includes('docker compose')) {
+  throw new Error('[traefik] Expected docker compose commands in provision script');
+}
+if (!traefikScript.includes('acme.json')) {
+  throw new Error('[traefik] Expected acme.json setup in traefik mode');
+}
+if (!traefikScript.includes('certificatesresolvers')) {
+  throw new Error('[traefik] Expected certificatesresolvers in traefik mode');
 }
 
-console.log('OK');
+console.log('OK: traefik mode');
 
+// --- Test 2: Cloudflare Tunnel mode ---
+const testTunnelToken = 'eyJhIjoidGVzdC1hY2NvdW50IiwidCI6InRlc3QtdHVubmVsLWlkIiwicyI6InRlc3Qtc2VjcmV0In0=';
+const cfScript = buildProvisionScript({
+  deployMode: 'cloudflare-tunnel',
+  tunnelToken: testTunnelToken,
+  cloudflareTunnelCompose: {
+    tunnelId: 'test-tunnel-id',
+    ttydSecret: 'test-secret',
+    ttydTtlSeconds: 86400,
+    traefikImage: 'traefik:v3.1',
+    cloudflaredImage: 'cloudflare/cloudflared:latest',
+    enableDashboard: false,
+  },
+  openclawRuntimeImage: 'openclaw-ttyd:local',
+  composePath: '/opt/traefik/docker-compose.yml',
+});
+
+if (!cfScript.includes('docker compose')) {
+  throw new Error('[cloudflare-tunnel] Expected docker compose commands in provision script');
+}
+if (!cfScript.includes('cloudflared')) {
+  throw new Error('[cloudflare-tunnel] Expected cloudflared in CF tunnel mode');
+}
+if (!cfScript.includes('--config /etc/cloudflared/config.yml')) {
+  throw new Error('[cloudflare-tunnel] Expected --config flag in CF tunnel mode');
+}
+if (!cfScript.includes('credentials.json')) {
+  throw new Error('[cloudflare-tunnel] Expected credentials.json setup in CF tunnel mode');
+}
+if (!cfScript.includes('ingress.json')) {
+  throw new Error('[cloudflare-tunnel] Expected ingress.json setup in CF tunnel mode');
+}
+if (cfScript.includes('acme')) {
+  throw new Error('[cloudflare-tunnel] Should NOT contain acme in CF tunnel mode');
+}
+if (cfScript.includes('vercel')) {
+  throw new Error('[cloudflare-tunnel] Should NOT contain vercel in CF tunnel mode');
+}
+if (cfScript.includes('*.example.com')) {
+  throw new Error('[cloudflare-tunnel] Should NOT contain wildcard DNS creation');
+}
+if (cfScript.includes('cfargotunnel.com')) {
+  throw new Error('[cloudflare-tunnel] Should NOT contain tunnel CNAME in provision script');
+}
+if (!cfScript.includes('jq')) {
+  throw new Error('[cloudflare-tunnel] Expected jq in package install');
+}
+
+console.log('OK: cloudflare-tunnel mode');
+
+// --- Test 3: URL construction — Traefik (multi-level) ---
+const traefikUrls = buildInstanceUrls({
+  instanceId: 'alice', baseDomain: 'example.com',
+  hostShard: 'h1', terminalToken: 'tok',
+});
+if (traefikUrls.hostName !== 'openclaw-alice.h1.openclaw.example.com') {
+  throw new Error(`Expected multi-level URL, got: ${traefikUrls.hostName}`);
+}
+
+console.log('OK: traefik URL construction');
+
+// --- Test 4: URL construction — Cloudflare (flat) ---
+const cfUrls = buildInstanceUrls({
+  instanceId: 'alice', baseDomain: 'example.com',
+  terminalToken: 'tok',
+});
+if (cfUrls.hostName !== 'openclaw-alice.example.com') {
+  throw new Error(`Expected flat URL, got: ${cfUrls.hostName}`);
+}
+
+console.log('OK: cloudflare URL construction');
